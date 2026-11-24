@@ -1,0 +1,31 @@
+﻿#include "resource.h"
+#include "afxres.h"
+#include "verrsrc.h"
+
+LANGUAGE LANG_VIETNAMESE, SUBLANG_VIETNAMESE_VIETNAM
+
+IDD_FILECLIENT_DIALOG DIALOGEX 0, 0, 620, 400
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX
+CAPTION "FileClient - File Sync"
+FONT 9, "Segoe UI", 400, 0, 0x0
+BEGIN
+    LTEXT           "Server IP:", -1, 8, 10, 42, 12
+    EDITTEXT        IDC_EDIT_IP, 54, 8, 110, 14, ES_AUTOHSCROLL
+    LTEXT           "Port:", -1, 172, 10, 22, 12
+    EDITTEXT        IDC_EDIT_PORT, 198, 8, 50, 14, ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Watch:", -1, 8, 30, 32, 12
+    EDITTEXT        IDC_EDIT_WATCH, 54, 28, 400, 14, ES_AUTOHSCROLL
+    PUSHBUTTON      "Browse...", IDC_BTN_BROWSE, 458, 28, 50, 14
+    LTEXT           "Token:", -1, 8, 50, 30, 12
+    EDITTEXT        IDC_EDIT_TOKEN, 54, 48, 200, 14, ES_AUTOHSCROLL
+    PUSHBUTTON      "Start", IDC_BTN_START, 470, 8, 70, 20
+    PUSHBUTTON      "Stop", IDC_BTN_STOP, 544, 8, 70, 20
+    LTEXT           "Status: Idle", IDC_STATIC_STATUS, 8, 72, 500, 12
+    LTEXT           "Log:", -1, 8, 92, 20, 12
+    LISTBOX         IDC_LIST_LOG, 8, 106, 606, 288, LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+END
+
+STRINGTABLE
+BEGIN
+    IDR_MAINFRAME           "FileClient"
+END

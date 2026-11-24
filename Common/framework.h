@@ -1,0 +1,16 @@
+#pragma once
+// framework.h — include Win32/Winsock chung cho Common (KHÔNG có MFC).
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+
+#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "Bcrypt.lib")

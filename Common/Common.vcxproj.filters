@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source"><UniqueIdentifier>{aaaaaaaa-0000-0000-0000-000000000001}</UniqueIdentifier></Filter>
+    <Filter Include="Header"><UniqueIdentifier>{aaaaaaaa-0000-0000-0000-000000000002}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ByteRangeDelta.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="V5Wire.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="Protocol.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="FrameCodec.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="Crypto.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="Util.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="Logger.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="PathSanitizer.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="FileIo.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="ExtensionFilter.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="DeltaSync.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="Scheduler.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="Callbacks.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="SyncQueue.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="Watcher.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="ClientEngine.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="ClientSession.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="ServerEngine.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="SchedulerThread.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="pch.cpp"><Filter>Source</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ClientPresence.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="TransferProgress.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ByteRangeDelta.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="VersionedFileNames.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="FileInstanceId.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="FileVersionStore.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ShardedBaselineIndex.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="DurableEventLog.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="UsnJournalGuard.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="DiskBaselineLookup.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="IocpAcceptLoop.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="GlobalTransferControl.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="DiskSnapshotSpool.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="V5Wire.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="Protocol.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="FrameCodec.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="Crypto.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="Util.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="Logger.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="PathSanitizer.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="FileIo.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ExtensionFilter.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="DeltaSync.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="Scheduler.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="Callbacks.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="SyncQueue.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="Watcher.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ClientEngine.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ClientSession.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="SequentialTransferQueue.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ServerEngine.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="SchedulerThread.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="pch.h"><Filter>Header</Filter></ClInclude>
+  </ItemGroup>
+</Project>

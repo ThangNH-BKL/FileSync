@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source"><UniqueIdentifier>{bbbbbbbb-0000-0000-0000-000000000001}</UniqueIdentifier></Filter>
+    <Filter Include="Header"><UniqueIdentifier>{bbbbbbbb-0000-0000-0000-000000000002}</UniqueIdentifier></Filter>
+    <Filter Include="Resource"><UniqueIdentifier>{bbbbbbbb-0000-0000-0000-000000000003}</UniqueIdentifier></Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="CFServerApp.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="CFServerDlg.cpp"><Filter>Source</Filter></ClCompile>
+    <ClCompile Include="pch.cpp"><Filter>Source</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CFServerApp.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="CFServerDlg.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="resource.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="pch.h"><Filter>Header</Filter></ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FileServer.rc"><Filter>Resource</Filter></ResourceCompile>
+  </ItemGroup>
+</Project>

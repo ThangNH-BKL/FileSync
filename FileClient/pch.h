@@ -1,0 +1,9 @@
+#pragma once
+#include "framework.h"
+#include "resource.h"
+#include <afxdialogex.h>
+#include <string>
+#include <vector>
+#include <memory>
+#include <atomic>
+#include <mutex>

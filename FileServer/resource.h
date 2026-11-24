@@ -1,0 +1,22 @@
+#pragma once
+#define IDD_FILESERVER_DIALOG            102
+#define IDR_MAINFRAME                    128
+#define IDC_EDIT_PORT                    1001
+#define IDC_EDIT_TOKEN                   1002
+#define IDC_EDIT_ROOT                    1003
+#define IDC_BTN_BROWSE                   1004
+#define IDC_BTN_START                    1005
+#define IDC_BTN_STOP                     1006
+#define IDC_LIST_CLIENTS                 1007
+#define IDC_TREE_FILES                   1008
+#define IDC_EDIT_FILTER                  1009
+#define IDC_LIST_LOG                     1016
+#define IDC_STATIC_STATUS                1017
+#define IDC_CHECK_SCHEDULE              1018
+#define IDC_DTP_START_DATE              1019
+#define IDC_DTP_START_TIME              1020
+#define IDC_DTP_END_DATE                1021
+#define IDC_DTP_END_TIME                1022
+#define IDC_PROGRESS_FILES               1023
+#define IDC_STATIC_PROGRESS              1024
+#define IDC_STATIC_PROGRESS_DETAIL       1025

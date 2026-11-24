@@ -1,0 +1,197 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Common", "Common\Common.vcxproj", "{11111111-1111-1111-1111-111111111111}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FileClient", "FileClient\FileClient.vcxproj", "{44444444-4444-4444-4444-444444444444}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Tests", "Tests\Tests.vcxproj", "{33333333-3333-3333-3333-333333333333}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FileServer", "FileServer\FileServer.vcxproj", "{22222222-2222-2222-2222-222222222222}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{22222222-2222-2222-2222-222222222222}.Debug|x64.ActiveCfg = Debug|x64
+		{22222222-2222-2222-2222-222222222222}.Debug|x64.Build.0 = Debug|x64
+		{22222222-2222-2222-2222-222222222222}.Release|x64.ActiveCfg = Release|x64
+		{22222222-2222-2222-2222-222222222222}.Release|x64.Build.0 = Release|x64
+		{11111111-1111-1111-1111-111111111111}.Debug|x64.ActiveCfg = Debug|x64
+		{11111111-1111-1111-1111-111111111111}.Debug|x64.Build.0 = Debug|x64
+		{11111111-1111-1111-1111-111111111111}.Release|x64.ActiveCfg = Release|x64
+		{11111111-1111-1111-1111-111111111111}.Release|x64.Build.0 = Release|x64
+		{44444444-4444-4444-4444-444444444444}.Debug|x64.ActiveCfg = Debug|x64
+		{44444444-4444-4444-4444-444444444444}.Debug|x64.Build.0 = Debug|x64
+		{44444444-4444-4444-4444-444444444444}.Release|x64.ActiveCfg = Release|x64
+		{44444444-4444-4444-4444-444444444444}.Release|x64.Build.0 = Release|x64
+		{33333333-3333-3333-3333-333333333333}.Debug|x64.ActiveCfg = Debug|x64
+		{33333333-3333-3333-3333-333333333333}.Debug|x64.Build.0 = Debug|x64
+		{33333333-3333-3333-3333-333333333333}.Release|x64.ActiveCfg = Release|x64
+		{33333333-3333-3333-3333-333333333333}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
+16) FINAL_REPORT.md — Deliverable cuối
+markdown
+# FINAL_REPORT.md — FileSync (FileServer + FileClient)
+
+## ⚠️ Tuyên bố trung thực
+
+- **KHÔNG có mã nguồn nào đã được BUILD trong môi trường soạn thảo.**
+- **KHÔNG có ca test nào đã được CHẠY.**
+- Tất cả kết quả trong `TEST_REPORT.md` và mục "Kiểm chứng" bên dưới là **NOT VERIFIED**.
+- Không có PASS/FAIL giả được ghi trong bất kỳ báo cáo nào.
+
+## Trạng thái từng vai trò
+
+| Vai trò | Trạng thái | Ghi chú |
+|---|---|---|
+| **Architect (Bước 01)** | ✅ HOÀN TẤT | `ARCHITECT.md` do người dùng cung cấp; đã review và chốt 3 điều chỉnh (delta flow, engine-vào-Common, MAX_CLIENTS=16) trong trao đổi. |
+| **Coder (Bước 02)** | ✅ HOÀN TẤT (mã nguồn) | 21 file Common/ + 11 FileServer/ + 12 FileClient/ + 12 Tests/ + 2 .sln. |
+| **Build (Bước 03)** | ❌ **NOT VERIFIED** | Chưa chạy `msbuild` — cần VS2022 + Windows SDK + workload "C++ MFC for latest v143". |
+| **Tester (Bước 04)** | ❌ **NOT VERIFIED** | 25 ca test đã viết, chưa compile, chưa chạy. |
+| **Reviewer (Bước 05)** | ✅ HOÀN TẤT (tĩnh) | `REVIEW.md`: 0 Critical, 0 High, 2 Medium, 6 Low. Cần chạy động để xác nhận. |
+
+## Kiểm chứng Build (thực tế)
+
+| Hạng mục | Trạng thái |
+|---|---|
+| Build Debug x64 | **NOT VERIFIED** |
+| Build Release x64 | **NOT VERIFIED** |
+| 0 error | **NOT VERIFIED** |
+| 0 warning /W4 | **NOT VERIFIED** |
+| `FileServer.exe` output | **NOT VERIFIED** |
+| `FileClient.exe` output | **NOT VERIFIED** |
+| `Tests.exe` output | **NOT VERIFIED** |
+
+**Phân biệt rõ:** "đã viết mã nguồn" ≠ "đã build". Tài liệu này KHÔNG khẳng định mã build được.
+
+## Hướng dẫn build
+
+### Yêu cầu
+- Windows 10/11 x64
+- Visual Studio 2022 (17.x)
+- Workload "Desktop development with C++" + "**C++ MFC for latest v143 build tools (x86 & x64)**" + Windows 10/11 SDK
+- Không cần Boost/Qt/thư viện bên thứ ba
+
+### Cấu trúc thư mục (dùng chung)
+FileSync/
+├── Common/ (21 file)
+├── FileServer/ (11 file)
+├── FileClient/ (12 file)
+├── Tests/ (12 file)
+├── FileServer.sln
+├── FileClient.sln
+├── README.md
+├── ARCHITECT.md (do người dùng cung cấp)
+├── TEST_REPORT.md
+├── REVIEW.md
+└── FINAL_REPORT.md (file này)
+
+text
+
+### Build
+- Mở `FileServer.sln` → chọn `Release | x64` → Build (Ctrl+Shift+B)
+- Mở `FileClient.sln` → chọn `Release | x64` → Build
+
+Command line:
+msbuild FileServer.sln /p:Configuration=Release /p:Platform=x64
+msbuild FileClient.sln /p:Configuration=Release /p:Platform=x64
+
+text
+
+## Hướng dẫn mở cổng firewall (máy Server, PowerShell as Admin)
+New-NetFirewallRule -DisplayName "FileSync Server" -Direction Inbound -Protocol TCP -LocalPort 9000 -Action Allow
+
+text
+Thay `9000` bằng port thực tế bạn dùng.
+
+## Demo 2 app trên cùng máy (127.0.0.1)
+
+### Chuẩn bị
+- Tạo 2 thư mục: `C:\WatchRoot` (nguồn), `C:\ServerRoot` (đích)
+
+### Chạy Server
+1. Chạy `build\x64\Release\FileServer.exe`
+2. Nhập:
+   - Port: `9000`
+   - Token: `demo-secret`
+   - Root: `C:\ServerRoot` (Browse)
+   - Filter: `*`
+   - Mode: `Window` → From `00:00` To `00:00` (cả ngày, để sync ngay)
+3. Nhấn **Start**
+4. UI hiển thị `Status: Running`
+
+### Chạy Client
+1. Chạy `build\x64\Release\FileClient.exe`
+2. Nhập:
+   - Server IP: `127.0.0.1`
+   - Port: `9000`
+   - Watch: `C:\WatchRoot` (Browse)
+   - Token: `demo-secret`
+3. Nhấn **Start**
+4. UI hiển thị `Status: Connected`
+
+### Kiểm tra
+1. Tạo file `C:\WatchRoot\hello.txt` với nội dung "Hello"
+2. Đợi ~1-2 giây
+3. Kiểm tra `C:\ServerRoot\<hostname-máy-bạn>\hello.txt` → phải khớp nội dung
+4. Sửa file → tự đồng bộ lại
+5. Đổi tên file → file mới xuất hiện ở server, file cũ giữ nguyên
+6. Xóa file ở client → server **KHÔNG** xóa (đúng spec §5), chỉ log phía client
+7. Xem log: `server_conn.log` cạnh FileServer.exe; `client_conn.log` cạnh FileClient.exe
+
+### Kịch bản reconnect (test thủ công)
+1. Khi cả 2 đang chạy, bấm **Stop** ở Server
+2. Client hiển thị `Reconnecting (backoff)...`
+3. Tạo thêm file ở client
+4. Bấm **Start** lại Server (cùng port, token)
+5. Client tự kết nối lại, gửi các file tồn đọng → server nhận đủ
+
+## Giới hạn đã biết (tham chiếu ARCHITECT.md §14 + REVIEW.md)
+- **L1:** Không có TLS — token + dữ liệu truyền dạng rõ trên TCP. Chỉ dùng LAN tin cậy.
+- **L2:** Token so sánh constant-time nhưng vẫn có thể bị offline brute-force nếu lộ file cấu hình.
+- **L7:** Không có versioning/conflict — đồng bộ 1 chiều Client→Server, ghi đè file đích.
+- **L9:** Chỉ đồng bộ nội dung + mtime; không ACL/attributes/ADS.
+- **Empty dirs không sync** (REVIEW L2).
+- **File cùng size sửa nội dung (chưa có event Modified):** initial snapshot có thể bỏ sót (REVIEW L6).
+- **Copy-to-tmp O(size)** mỗi lần sync (REVIEW M1) — với file lớn, CPU/IO tăng tương ứng kích thước.
+- **`ServerEngine::OnSessionDead` không được gọi tự động** (REVIEW M2) — sessions_ tích tụ nhẹ cho đến lần scheduler tick.
+
+## Trạng thái sẵn sàng
+
+| Mục | Trạng thái |
+|---|---|
+| Mã nguồn đầy đủ | ✅ Có |
+| Biên dịch được | ❌ **Chưa kiểm chứng** — cần build thực tế |
+| 0 error /W4 | ❌ **Chưa kiểm chứng** |
+| Tests PASS | ❌ **Chưa kiểm chứng** |
+| Demo loopback | ❌ **Chưa kiểm chứng** |
+
+**Kết luận:** Mã nguồn **SẴN SÀNG để build thử**, nhưng chất lượng thực tế chỉ được xác nhận sau khi build + chạy test + chạy tay 2 app.
+✅ Tổng kết giao hàng
+Dự án	Solution	Project files	File MỚI cần tạo
+1	FileServer.sln	Common + FileServer + Tests	(đã giao batch 1-8b)
+2	FileClient.sln	Common + FileClient + Tests	12 file FileClient/ + FileClient.sln
+—	—	—	FINAL_REPORT.md
+Việc bạn cần làm:
+
+Tạo folder FileClient/ trong FileSync/
+
+Copy 12 file ở trên vào FileClient/
+
+Copy FileClient.sln + FINAL_REPORT.md vào gốc FileSync/
+
+Common/ và Tests/ đã có từ Dự án 1 — không cần tạo lại
+
+Mở FileClient.sln → Build
+
+Không còn batch nào nữa. Toàn bộ yêu cầu đề bài đã giao đủ, trừ build + test thực tế — việc đó phải làm trên máy bạn vì tôi không có môi trường VS2022.
+
+Sau khi bạn build, dán log lỗi (nếu có) để tôi sửa từng vòng.

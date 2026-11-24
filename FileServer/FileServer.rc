@@ -1,0 +1,46 @@
+#include "resource.h"
+#include "afxres.h"
+#include <commctrl.h>
+#include "verrsrc.h"
+
+LANGUAGE LANG_VIETNAMESE, SUBLANG_VIETNAMESE_VIETNAM
+
+IDD_FILESERVER_DIALOG DIALOGEX 0, 0, 700, 510
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
+CAPTION "FileServer - File Sync"
+FONT 9, "Segoe UI", 400, 0, 0x0
+BEGIN
+    LTEXT           "Port:", -1, 8, 10, 24, 12
+    EDITTEXT        IDC_EDIT_PORT, 36, 8, 50, 14, ES_AUTOHSCROLL | ES_NUMBER
+    LTEXT           "Token:", -1, 96, 10, 30, 12
+    EDITTEXT        IDC_EDIT_TOKEN, 128, 8, 160, 14, ES_AUTOHSCROLL
+    LTEXT           "Root:", -1, 8, 30, 24, 12
+    EDITTEXT        IDC_EDIT_ROOT, 36, 28, 400, 14, ES_AUTOHSCROLL
+    PUSHBUTTON      "Browse...", IDC_BTN_BROWSE, 442, 28, 50, 14
+    PUSHBUTTON      "Start", IDC_BTN_START, 500, 8, 60, 14
+    PUSHBUTTON      "Stop", IDC_BTN_STOP, 566, 8, 60, 14
+    LTEXT           "Filter:", -1, 8, 50, 30, 12
+    EDITTEXT        IDC_EDIT_FILTER, 36, 48, 160, 14, ES_AUTOHSCROLL
+    CONTROL         "Enable schedule", IDC_CHECK_SCHEDULE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 212, 48, 120, 14
+    LTEXT           "Start:", -1, 8, 70, 34, 12
+    CONTROL         "", IDC_DTP_START_DATE, "SysDateTimePick32", DTS_SHORTDATEFORMAT | WS_TABSTOP, 45, 67, 94, 17
+    CONTROL         "", IDC_DTP_START_TIME, "SysDateTimePick32", DTS_TIMEFORMAT | DTS_UPDOWN | WS_TABSTOP, 143, 67, 76, 17
+    LTEXT           "End:", -1, 237, 70, 28, 12
+    CONTROL         "", IDC_DTP_END_DATE, "SysDateTimePick32", DTS_SHORTDATEFORMAT | WS_TABSTOP, 266, 67, 94, 17
+    CONTROL         "", IDC_DTP_END_TIME, "SysDateTimePick32", DTS_TIMEFORMAT | DTS_UPDOWN | WS_TABSTOP, 364, 67, 76, 17
+    LTEXT           "Clients:", -1, 8, 92, 40, 12
+    CONTROL         "", IDC_LIST_CLIENTS, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP, 8, 106, 282, 160
+    LTEXT           "Tree:", -1, 298, 92, 24, 12
+    CONTROL         "", IDC_TREE_FILES, "SysTreeView32", TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT | WS_BORDER | WS_TABSTOP, 298, 106, 394, 160
+    LTEXT           "Processed: 0 / 0 files (0%)", IDC_STATIC_PROGRESS, 8, 273, 400, 12
+    CONTROL         "", IDC_PROGRESS_FILES, "msctls_progress32", PBS_SMOOTH | WS_BORDER, 8, 289, 684, 16
+    LTEXT           "Updated: 0   Unchanged: 0   Active: 0   Pending: 0   Failed: 0", IDC_STATIC_PROGRESS_DETAIL, 8, 311, 682, 12
+    LTEXT           "Log:", -1, 8, 329, 20, 12
+    LISTBOX         IDC_LIST_LOG, 8, 343, 684, 140, LBS_NOINTEGRALHEIGHT | WS_VSCROLL | WS_BORDER | WS_TABSTOP
+    LTEXT           "Status: Idle", IDC_STATIC_STATUS, 8, 490, 400, 12
+END
+
+STRINGTABLE
+BEGIN
+    IDR_MAINFRAME           "FileServer"
+END

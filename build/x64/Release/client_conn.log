@@ -1,0 +1,5 @@
+2026-11-22 14:14:23.046 [INFO] ClientEngine: starting
+2026-11-22 14:14:24.066 [INFO] v5: awaiting server commit hello.txt TotalBytes=12 CopiedBytes=0 LiteralBytes=12 SentBytes=12
+2026-11-22 14:14:24.069 [INFO] File committed and SHA256 verified on server: hello.txt
+2026-11-22 14:14:24.232 [WARN] Recv failed: recv: A request to send or receive data was disallowed because the socket had already been shut down in that direction with a previous shutdown call.
+2026-11-22 14:14:24.232 [INFO] ClientEngine: stopped

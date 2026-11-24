@@ -1,0 +1,10 @@
+version,run,dataset,direction,limit_MiBps,files_expected,files_ACKed,files_changed,elapsed_seconds,source_bytes,process_avg_CPU_percent,peak_WorkingSet_MiB,server_process_IO_MiBps,client_adaptive_wait_us,server_pacing_wait_us,result_SHA256,notes
+V5,1,10000_INI_initial,client_to_server,,,,,,,,,,,,,
+V5,1,20_RAW_initial,client_to_server,,,,,,,,,,,,,
+V5,1,10000_INI_unchanged,client_to_server,,,,,,,,,,,,,
+V8.2,1,10000_INI_initial,client_to_server,,,,,,,,,,,,,
+V8.2,1,20_RAW_initial,client_to_server,,,,,,,,,,,,,
+V8.2,1,10000_INI_unchanged,client_to_server,,,,,,,,,,,,,
+V8.3,1,10000_INI_initial,client_to_server,,,,,,,,,,,,,
+V8.3,1,20_RAW_initial,client_to_server,,,,,,,,,,,,,
+V8.3,1,10000_INI_unchanged,client_to_server,,,,,,,,,,,,,

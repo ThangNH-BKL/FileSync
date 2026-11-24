@@ -3,6 +3,7 @@
 // No socket operations are performed here. Retain disconnected clients so that
 // their offline state remains visible in the Server's Clients table.
 
+#include "ClientConnectionInfo.h"
 #include <cstddef>
 #include <string>
 #include <unordered_map>
@@ -16,6 +17,7 @@ public:
     struct Entry {
         std::string hostKey;
         std::string ip;
+        std::string watchRoot;
         bool online = false;
     };
 
@@ -24,16 +26,25 @@ public:
     // The same IP may host several FileClient.exe instances with different
     // executable-folder keys, so identity includes both fields.
     void Reconcile(const std::vector<std::pair<std::string, std::string>>& live) {
+        std::vector<ClientConnectionInfo> details;
+        details.reserve(live.size());
+        for (const auto& item : live) details.push_back({item.first, item.second, ""});
+        ReconcileDetailed(details);
+    }
+
+    void ReconcileDetailed(const std::vector<ClientConnectionInfo>& live) {
         for (auto& entry : entries_) entry.online = false;
         for (const auto& item : live) {
-            if (item.first.empty() || item.second.empty()) continue;
-            const auto key = Key(item.first, item.second);
+            if (item.hostKey.empty() || item.ip.empty()) continue;
+            const auto key = Key(item.hostKey, item.ip);
             const auto found = positions_.find(key);
             if (found != positions_.end()) {
-                entries_[found->second].online = true;
+                Entry& entry = entries_[found->second];
+                entry.online = true;
+                if (!item.watchRoot.empty()) entry.watchRoot = item.watchRoot;
             } else {
                 positions_.emplace(key, entries_.size());
-                entries_.push_back({item.first, item.second, true});
+                entries_.push_back({item.hostKey, item.ip, item.watchRoot, true});
             }
         }
     }

@@ -5,6 +5,7 @@
 // This reduces cold RAM use and random lookups; group commit is NOT included.
 // This adapter must not run concurrently with V7 on the same ServerRoot.
 #include "ShardedBaselineIndex.h"
+#include "DurabilityTelemetry.h"
 #include <atomic>
 #include <array>
 #include <vector>
@@ -122,7 +123,12 @@ private:
             OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
         if(h==INVALID_HANDLE_VALUE)return false;
         DWORD n=0;bool ok=WriteFile(h,bytes.data(),DWORD(bytes.size()),&n,nullptr)!=FALSE &&
-            n==bytes.size() && FlushFileBuffers(h)!=FALSE;
+            n==bytes.size();
+        if(ok) {
+            const auto started=durability::Clock::now();
+            ok=FlushFileBuffers(h)!=FALSE;
+            durability::RecordBaseline(durability::Us(started));
+        }
         CloseHandle(h);return ok;
 #else
         int fd=open(path.c_str(),O_WRONLY|O_APPEND|O_CREAT,0600);if(fd<0)return false;

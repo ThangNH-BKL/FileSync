@@ -5,6 +5,7 @@
   <ItemGroup>
     <ClCompile Include="test_v7_scale.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="test_perf_spool.cpp" />
+    <ClCompile Include="test_v85_lsm.cpp"><Filter>Source</Filter></ClCompile>
     <ClCompile Include="test_v8_components.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="test_file_versioning.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="MiniTest.cpp"><Filter>Source Files</Filter></ClCompile>
@@ -19,6 +20,7 @@
     <ClCompile Include="test_scheduler.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="test_absolute_schedule.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="test_client_presence.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="test_v86_ui.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="test_transfer_progress.cpp"><Filter>Source Files</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>

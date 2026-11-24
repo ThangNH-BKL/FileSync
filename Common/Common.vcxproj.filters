@@ -27,6 +27,12 @@
     <ClCompile Include="pch.cpp"><Filter>Source</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AdaptiveServerPolicy.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ServerNetworkSampler.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ServerLimitSettings.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="DurabilityTelemetry.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="StageFlushPolicy.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="AdaptiveSleepPolicy.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="ClientPresence.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="TransferProgress.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="ByteRangeDelta.h"><Filter>Header</Filter></ClInclude>
@@ -37,6 +43,8 @@
     <ClInclude Include="DurableEventLog.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="UsnJournalGuard.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="DiskBaselineLookup.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="DurableWalGroupCommit.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ServerLsmBaselineIndex.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="IocpAcceptLoop.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="GlobalTransferControl.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="DiskSnapshotSpool.h"><Filter>Header</Filter></ClInclude>

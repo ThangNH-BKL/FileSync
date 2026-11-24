@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 // ServerEngine.h — listen socket, accept thread, quản lý ClientSession*.
 
 #include "Protocol.h"
+#include "ClientConnectionInfo.h"
 #include "Callbacks.h"
 #include "TransferProgress.h"
 #include "GlobalTransferControl.h"
@@ -31,7 +32,12 @@ public:
         SchedConfig  sched;
         size_t       maxClients = 512;
         unsigned     maxActiveTransfers = 12;
+        // Explicit dialog values take precedence over legacy environment overrides.
+        // False for non-UI/legacy callers, which retain FILESYNC_* compatibility.
+        bool         limitsFromDialog = false;
         uint64_t     inboundBytesPerSecond = 4ull * 1024 * 1024;
+        bool         adaptiveServerFlow = true;
+        uint64_t     adaptiveMaximumBytesPerSecond = 10ull * 1024 * 1024;
         uint64_t     maxInventorySpoolBytes = 64ull * 1024 * 1024 * 1024; // Admission limit; NOT proof of load capacity.
     };
 
@@ -46,10 +52,12 @@ public:
 
     // UI có thể gọi để biết danh sách client
     std::vector<std::pair<std::string, std::string>> ClientList() const; // <hostKey, peerIp>
+    std::vector<ClientConnectionInfo> ClientListDetails() const; // UI only, includes original WatchRoot
     TransferProgress GetProgress() const; // aggregate of currently connected sessions
 
 private:
     void AcceptThreadProc();
+    void FlowMonitorProc();
     void AdmitSocket(SOCKET client, const sockaddr_in& peer);
     void OnSessionDead(ClientSession* s);
     void OnSchedulerFlip(bool inWindow);
@@ -63,6 +71,7 @@ private:
 
     SOCKET                        listenSock_ = INVALID_SOCKET;
     std::thread                   acceptThread_;
+    std::thread                   flowMonitorThread_;
     std::atomic<bool>             stop_{false};
     std::atomic<bool>             running_{false};
 

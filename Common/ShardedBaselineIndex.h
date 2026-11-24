@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 #include <algorithm>
+#include "DurabilityTelemetry.h"
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -117,7 +118,12 @@ private:
         if(h==INVALID_HANDLE_VALUE) return false;
         DWORD n=0;
         bool good=WriteFile(h,payload.data(),static_cast<DWORD>(payload.size()),&n,nullptr)!=FALSE &&
-                  n==payload.size() && FlushFileBuffers(h)!=FALSE;
+                  n==payload.size();
+        if(good) {
+            const auto started=durability::Clock::now();
+            good=FlushFileBuffers(h)!=FALSE;
+            durability::RecordBaseline(durability::Us(started));
+        }
         CloseHandle(h);
         return good;
 #else

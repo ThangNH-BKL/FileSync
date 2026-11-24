@@ -29,6 +29,7 @@ protected:
     afx_msg void OnBnClickedBtnStart();
     afx_msg void OnBnClickedBtnStop();
     afx_msg void OnBnClickedBtnBrowse();
+    afx_msg void OnWindowPosChanging(WINDOWPOS* lpwndpos);
     afx_msg void OnClose();
     afx_msg void OnDestroy();
     afx_msg void OnTimer(UINT_PTR nIDEvent);
@@ -48,6 +49,7 @@ private:
     NOTIFYICONDATAW trayIcon_{};
     bool trayInstalled_ = false;
     bool exiting_ = false;
+    bool allowDialogVisible_ = false; // Startup stays in tray until explicit Open
     UINT taskbarCreatedMsg_ = 0;
     void AppendLog(const std::string& line);
     void LoadSettings();

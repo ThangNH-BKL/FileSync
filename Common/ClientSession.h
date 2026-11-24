@@ -1,8 +1,9 @@
-#pragma once
+﻿#pragma once
 // ClientSession.h — 1 thread / 1 client. Xử lý handshake, snapshot, event, chunk.
 // Server engine sở hữu.
 
 #include "Protocol.h"
+#include "ClientConnectionInfo.h"
 #include "ExtensionFilter.h"
 #include "SequentialTransferQueue.h"
 #include "TransferProgress.h"
@@ -49,6 +50,10 @@ public:
     bool IsAlive() const            { return !dead_.load(); }
     std::string HostKey() const    { std::lock_guard<std::mutex> g(metaMu_); return hostKey_; }
     std::string PeerIp() const     { std::lock_guard<std::mutex> g(metaMu_); return peerIp_; }
+    ClientConnectionInfo ConnectionInfo() const {
+        std::lock_guard<std::mutex> g(metaMu_);
+        return {hostKey_, peerIp_, clientWatchRoot_};
+    }
     // Thread-safe snapshot; never expose the session-owned transfer queue to MFC.
     TransferProgress GetProgress() const {
         std::lock_guard<std::mutex> g(progressMu_);
@@ -102,6 +107,7 @@ private:
 
     mutable std::mutex metaMu_;
     std::string        hostKey_;
+    std::string        clientWatchRoot_; // From authenticated HELLO, never used for server paths
     std::string        peerIp_;
     std::wstring       clientRoot_;   // <serverRoot>\<hostKey>
 
@@ -140,6 +146,7 @@ private:
         std::array<uint8_t,32> baseSha{};
         std::array<uint8_t,32> finalSha{};
         bool awaitingLiteral = false;
+        uint64_t unflushedLiteralBytes = 0;
         V5Check literal;
     } v5_;
     std::string v5AdvertisedPath_;

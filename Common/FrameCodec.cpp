@@ -2,6 +2,7 @@
 #include "FrameCodec.h"
 #include "PerfDiagnostics.h"
 #include "Util.h"   // ErrStr(WSAGetLastError)
+#include "AdaptiveSleepPolicy.h"
 #include <iphlpapi.h>
 #include <netioapi.h>
 #include <thread>
@@ -51,8 +52,11 @@ public:
                 }
                 return true;
             }
+            // Preserve the 40% Client cap, but do not oversleep by a fixed
+            // 50ms when the remaining token wait is only a few milliseconds.
+            const auto slice=AdaptiveWaitSlice(due-now);
             lock.unlock();
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(slice);
             lock.lock();
         }
     }
@@ -222,7 +226,10 @@ bool FrameCodec::SendFrame(MsgType type,
                            const std::atomic<bool>& stop,
                            std::string& err) {
     if (payloadLen > kMaxPayload) { err = "payload too large"; return false; }
-    if ((type == MsgType::FILE_CHUNK || type == MsgType::V5_BYTES || type == MsgType::V5_SIGNATURE_PAGE) && !Bandwidth().BeforeChunk(payloadLen + kHeaderSize, stop)) {
+    // V8.4: preserve the original CLIENT adaptive limiter for upload payloads.
+    // Signature pages travel Server->Client: they must not be throttled by the
+    // Client's upload algorithm. TCP/network QoS still governs the socket.
+    if ((type == MsgType::FILE_CHUNK || type == MsgType::V5_BYTES) && !Bandwidth().BeforeChunk(payloadLen + kHeaderSize, stop)) {
         err = "stopped during bandwidth wait"; return false;
     }
 

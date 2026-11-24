@@ -13,17 +13,22 @@
 #include <unordered_set>
 #include <algorithm>
 #include "PerfDiagnostics.h"
+#include "AdaptiveServerPolicy.h"
 
 namespace fsyn {
 class GlobalTransferControl {
 public:
     explicit GlobalTransferControl(unsigned activeLimit=12,uint64_t bytesPerSec=4ull*1024*1024,
-                                   uint64_t spoolBudget=64ull*1024*1024*1024)
+                                   uint64_t spoolBudget=64ull*1024*1024*1024,
+                                   bool adaptive=false,uint64_t maximum=10ull*1024*1024)
         : limit_((std::max)(1u,activeLimit)),
           rate_(bytesPerSec),
           spoolBudget_(spoolBudget),
           last_(std::chrono::steady_clock::now()),
-          credit_(static_cast<double>(bytesPerSec)) {}
+          credit_(static_cast<double>(bytesPerSec)),
+          adaptive_(adaptive), policy_(1024ull*1024,maximum,bytesPerSec) {
+        if(adaptive_) rate_=policy_.Rate();
+    }
     bool TryEnter() {
         std::lock_guard<std::mutex> lock(mu_);
         if(active_>=limit_) return false;
@@ -72,13 +77,31 @@ public:
     uint64_t SpoolUsed() const {std::lock_guard<std::mutex> lock(mu_);return spoolUsed_;}
     unsigned Active() const {std::lock_guard<std::mutex> lock(mu_); return active_;}
     unsigned Limit() const {return limit_;}
-    uint64_t BytesPerSecond() const {return rate_;}
+    uint64_t BytesPerSecond() const {std::lock_guard<std::mutex> g(mu_);return rate_;}
+    bool Adaptive() const {return adaptive_;}
+    void ObserveStageFlush(uint64_t elapsedUs) {
+        stageFlushUs_.fetch_add(elapsedUs,std::memory_order_relaxed);
+        stageFlushCount_.fetch_add(1,std::memory_order_relaxed);
+    }
+    // Called by ServerEngine's 1-second monitor thread, not by recv workers.
+    void UpdateAdaptive(double otherFraction) {
+        if(!adaptive_) return;
+        AdaptiveServerPolicy::Sample sample{};
+        sample.externalFraction=otherFraction;
+        sample.flushUs=stageFlushUs_.exchange(0,std::memory_order_relaxed);
+        sample.flushCount=stageFlushCount_.exchange(0,std::memory_order_relaxed);
+        std::lock_guard<std::mutex> lock(mu_);
+        sample.activeTransfers=active_;
+        rate_=policy_.Step(sample);
+        credit_=(std::min)(credit_,static_cast<double>(rate_));
+    }
+    uint64_t FlushCount() const {return stageFlushCount_.load(std::memory_order_relaxed);}
     uint64_t ReceivedBytes() const {return pacedBytes_.load(std::memory_order_relaxed);}
     uint64_t PaceWaitUs() const {return pacedWaitUs_.load(std::memory_order_relaxed);}
     // Call after receiving a data payload, before consuming the next data
     // frame. Deliberately reserves credit for all sessions from one bucket.
     bool PaceReceived(uint64_t bytes, const std::atomic<bool>& stopped) {
-        if(rate_==0 || bytes==0) return true;
+        if(bytes==0) return true;
         const bool trace=perf::Enabled();
         const auto entered=perf::Clock::now();
         for(;;) {
@@ -89,13 +112,15 @@ public:
                 const auto now=std::chrono::steady_clock::now();
                 const double elapsed=std::chrono::duration<double>(now-last_).count();
                 last_=now;
-                credit_=(std::min)(static_cast<double>(rate_),credit_+elapsed*rate_);
+                if(rate_==0) return true;
+                // Allow a single oversized payload eventually to pass.
+                const double bucketCap=(std::max)(static_cast<double>(rate_),static_cast<double>(bytes));
+                credit_=(std::min)(bucketCap,credit_+elapsed*rate_);
                 if(credit_>=bytes) {
                     credit_-=bytes;
-                    if(trace) {
-                        pacedBytes_.fetch_add(bytes,std::memory_order_relaxed);
-                        pacedWaitUs_.fetch_add(perf::Us(entered,perf::Clock::now()),std::memory_order_relaxed);
-                    }
+                    // Always track received payload for network self-traffic subtraction.
+                    pacedBytes_.fetch_add(bytes,std::memory_order_relaxed);
+                    if(trace) pacedWaitUs_.fetch_add(perf::Us(entered,perf::Clock::now()),std::memory_order_relaxed);
                     return true;
                 }
                 double wait=(static_cast<double>(bytes)-credit_)/rate_;
@@ -114,6 +139,9 @@ private:
     uint64_t spoolBudget_=0, spoolUsed_=0;
     std::chrono::steady_clock::time_point last_;
     double credit_;
+    bool adaptive_=false;
+    AdaptiveServerPolicy policy_;
+    std::atomic<uint64_t> stageFlushUs_{0},stageFlushCount_{0};
     std::atomic<uint64_t> pacedBytes_{0},pacedWaitUs_{0};
 };
 } // namespace fsyn

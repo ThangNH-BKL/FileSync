@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #define IDD_FILESERVER_DIALOG            102
 #define IDR_MAINFRAME                    128
 #define IDC_EDIT_PORT                    1001
@@ -20,3 +20,15 @@
 #define IDC_PROGRESS_FILES               1023
 #define IDC_STATIC_PROGRESS              1024
 #define IDC_STATIC_PROGRESS_DETAIL       1025
+
+// V8.6 Server file filter preset controls (no protocol changes)
+#define IDC_CHECK_FILTER_XML            1030
+#define IDC_CHECK_FILTER_JSON           1031
+#define IDC_CHECK_FILTER_RAW            1032
+#define IDC_CHECK_FILTER_INI            1033
+#define IDC_CHECK_FILTER_RTF            1034
+#define IDC_CHECK_FILTER_OTHER          1035
+#define IDC_CHECK_FILTER_ALL            1036
+// Server-side admission and active-transfer limits (V8.6.5)
+#define IDC_EDIT_MAX_CLIENTS            1040
+#define IDC_EDIT_ACTIVE_TRANSFERS       1041

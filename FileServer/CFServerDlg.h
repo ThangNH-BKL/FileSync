@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "resource.h"
 #include <afxdialogex.h>
 #include <shellapi.h>
@@ -13,6 +13,8 @@
 #include <memory>
 #include <string>
 #include <deque>
+#include <vector>
+#include <utility>
 #include <unordered_map>
 #include <mutex>
 #include <atomic>
@@ -39,6 +41,9 @@ protected:
     afx_msg void OnBnClickedBtnStop();
     afx_msg void OnBnClickedBtnBrowse();
     afx_msg void OnBnClickedScheduleToggle();
+    afx_msg void OnBnClickedFilterOption(UINT nID);
+    afx_msg void OnNmDblClickClients(NMHDR* pNMHDR, LRESULT* pResult);
+    afx_msg void OnNmDblClickTree(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg void OnClose();
     afx_msg void OnDestroy();
     afx_msg LRESULT OnTrayIcon(WPARAM, LPARAM);
@@ -48,6 +53,7 @@ protected:
     afx_msg LRESULT OnAppState(WPARAM, LPARAM);
     afx_msg LRESULT OnAppClientList(WPARAM, LPARAM);
     afx_msg LRESULT OnAppTreeUpdate(WPARAM, LPARAM);
+    afx_msg LRESULT OnAppClientFolderResult(WPARAM, LPARAM);
     afx_msg LRESULT OnAppStopComplete(WPARAM, LPARAM);
     afx_msg void OnTimer(UINT_PTR nIDEvent);
 
@@ -72,6 +78,21 @@ private:
     void EnableConfig(bool enabled);
     void UpdateStatus(const CString& s);
     void UpdateScheduleControls();
+    void UpdateFilterControls();
+    bool BuildSelectedFilter(CStringW& result, CStringW& validationMessage);
+    void OpenClientDataFolder(const fsyn::ClientPresence::Entry& entry);
+    struct ClientFolderProbe {
+        std::mutex mu;
+        bool alive = true;
+        bool pending = false;
+        bool ready = false;
+        DWORD error = ERROR_SUCCESS;
+        HWND window = nullptr;
+        std::wstring target;
+        std::vector<std::pair<std::wstring, DWORD>> attempts;
+    };
+    // Shared lifetime lets a blocked SMB check finish safely after UI closes.
+    std::shared_ptr<ClientFolderProbe> folderProbe_ = std::make_shared<ClientFolderProbe>();
     void SetScheduleDefaults();
     bool ReadPickerDateTime(const CDateTimeCtrl& datePicker,
                             const CDateTimeCtrl& timePicker,

@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "ServerEngine.h"
 #include "Logger.h"
 #include "ClientSession.h"
@@ -6,6 +6,9 @@
 #include "Util.h"
 #include "IocpAcceptLoop.h"
 #include "PerfDiagnostics.h"
+#include "ServerNetworkSampler.h"
+#include "DurabilityTelemetry.h"
+#include "DurableWalGroupCommit.h"
 #include <cstdlib>
 
 namespace fsyn {
@@ -34,7 +37,7 @@ bool ServerEngine::Start() {
     // worker-thread allocations; stress testing is still mandatory.
     char maxBuf[24]{};
     const DWORD length = GetEnvironmentVariableA("FILESYNC_MAX_CLIENTS", maxBuf, sizeof(maxBuf));
-    if (length > 0 && length < sizeof(maxBuf)) {
+    if (!cfg_.limitsFromDialog && length > 0 && length < sizeof(maxBuf)) {
         char* end = nullptr;
         const unsigned long parsed = std::strtoul(maxBuf, &end, 10);
         if (end != maxBuf && *end == '\0' && parsed >= 128 && parsed <= 4096)
@@ -42,19 +45,29 @@ bool ServerEngine::Start() {
         else
             log_->Log(LogLevel::Warn, "Invalid FILESYNC_MAX_CLIENTS; using configured default");
     }
-    log_->Log(LogLevel::Info, "Connection admission limit: " + std::to_string(cfg_.maxClients));
+    log_->Log(LogLevel::Info, "Connection admission limit: " + std::to_string(cfg_.maxClients) +
+        (cfg_.limitsFromDialog ? " (dialog setting)" : " (config / optional env override)"));
     // Receive-side shared budget; do NOT confuse it with a hard wire-rate QoS.
     char setting[32]{};
     DWORD n=GetEnvironmentVariableA("FILESYNC_ACTIVE_TRANSFERS",setting,sizeof(setting));
-    if(n>0 && n<sizeof(setting)) {
+    if(!cfg_.limitsFromDialog && n>0 && n<sizeof(setting)) {
         char* end=nullptr; unsigned long v=std::strtoul(setting,&end,10);
         if(end!=setting && *end=='\0' && v>=1 && v<=64) cfg_.maxActiveTransfers=static_cast<unsigned>(v);
     }
+    // An explicit legacy global limit selects fixed mode for A/B regression.
     n=GetEnvironmentVariableA("FILESYNC_GLOBAL_MIBPS",setting,sizeof(setting));
     if(n>0 && n<sizeof(setting)) {
         char* end=nullptr; unsigned long v=std::strtoul(setting,&end,10);
-        if(end!=setting && *end=='\0' && v>=1 && v<=50)
+        if(end!=setting && *end=='\0' && v>=1 && v<=50) {
             cfg_.inboundBytesPerSecond=uint64_t(v)*1024u*1024u;
+            cfg_.adaptiveServerFlow=false;
+        }
+    }
+    n=GetEnvironmentVariableA("FILESYNC_ADAPTIVE_MAX_MIBPS",setting,sizeof(setting));
+    if(n>0 && n<sizeof(setting)) {
+        char* end=nullptr; unsigned long v=std::strtoul(setting,&end,10);
+        if(end!=setting && *end=='\0' && v>=2 && v<=100)
+            cfg_.adaptiveMaximumBytesPerSecond=uint64_t(v)*1024u*1024u;
     }
     n=GetEnvironmentVariableA("FILESYNC_SPOOL_LIMIT_GIB",setting,sizeof(setting));
     if(n>0 && n<sizeof(setting)) {
@@ -63,10 +76,13 @@ bool ServerEngine::Start() {
             cfg_.maxInventorySpoolBytes=uint64_t(v)*1024u*1024u*1024u;
     }
     transferControl_=std::make_shared<GlobalTransferControl>(
-        cfg_.maxActiveTransfers,cfg_.inboundBytesPerSecond,cfg_.maxInventorySpoolBytes);
+        cfg_.maxActiveTransfers,cfg_.inboundBytesPerSecond,cfg_.maxInventorySpoolBytes,
+        cfg_.adaptiveServerFlow,cfg_.adaptiveMaximumBytesPerSecond);
     log_->Log(LogLevel::Info,"Global active-file limit="+
         std::to_string(cfg_.maxActiveTransfers)+" receive pacing="+
-        std::to_string(cfg_.inboundBytesPerSecond)+" B/s (best effort)");
+        std::to_string(cfg_.inboundBytesPerSecond)+" B/s initial (best effort), mode="+
+        (cfg_.adaptiveServerFlow ? "adaptive" : "fixed")+
+        " ceiling="+std::to_string(cfg_.adaptiveMaximumBytesPerSecond));
 
     WSADATA wsa{};
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
@@ -107,6 +123,8 @@ bool ServerEngine::Start() {
     running_.store(true);
 
     acceptThread_ = std::thread(&ServerEngine::AcceptThreadProc, this);
+    if(cfg_.adaptiveServerFlow)
+        flowMonitorThread_ = std::thread(&ServerEngine::FlowMonitorProc,this);
 
     schedThread_ = std::make_unique<SchedulerThread>(
         sched_.get(), [this](bool in) { OnSchedulerFlip(in); });
@@ -127,6 +145,7 @@ void ServerEngine::Stop() {
         listenSock_ = INVALID_SOCKET;
     }
     if (acceptThread_.joinable()) acceptThread_.join();
+    if (flowMonitorThread_.joinable()) flowMonitorThread_.join();
 
     // Never block joining a session worker while holding sessionsMu_.
     std::vector<std::unique_ptr<ClientSession>> stopping;
@@ -137,6 +156,23 @@ void ServerEngine::Stop() {
     for(auto& s:stopping) s->Stop();
     stopping.clear();
 
+    if(perf::Enabled()) {
+        const auto d=durability::Read();
+        log_->Log(LogLevel::Info,"PERF metadata_flush baseline_count="+
+            std::to_string(d.baselineCount)+" baseline_us="+std::to_string(d.baselineUs)+
+            " manifest_count="+std::to_string(d.manifestCount)+
+            " manifest_us="+std::to_string(d.manifestUs));
+        char v85[8]{};
+        if(GetEnvironmentVariableA("FILESYNC_EXPERIMENTAL_LSM_WAL",v85,sizeof(v85))==1 &&
+           v85[0]=='1') {
+            const auto wal=DurableWalGroupCommit::Global().Stats();
+            log_->Log(LogLevel::Info,"PERF v85_group_wal records="+
+                std::to_string(wal.records)+" wal_flush_count="+
+                std::to_string(wal.flushes)+" wal_flush_us="+
+                std::to_string(wal.totalFlushUs)+" failed_batches="+
+                std::to_string(wal.failedBatches));
+        }
+    }
     if(perf::Enabled() && transferControl_) {
         log_->Log(LogLevel::Info,"PERF server_pacing rate_bytes_per_sec="+
             std::to_string(transferControl_->BytesPerSecond())+
@@ -147,6 +183,25 @@ void ServerEngine::Stop() {
     log_->Log(LogLevel::Info, "ServerEngine: stopped");
     running_.store(false);
     log_->Close();
+}
+
+void ServerEngine::FlowMonitorProc() {
+    ServerNetworkSampler sampler;
+    unsigned elapsed=0;
+    while(!stop_.load()) {
+        for(int i=0;i<10 && !stop_.load();++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        if(stop_.load()) break;
+        const double external=sampler.MeasureOtherFraction(
+            transferControl_->ReceivedBytes(),cfg_.adaptiveMaximumBytesPerSecond);
+        transferControl_->UpdateAdaptive(external);
+        if(perf::Enabled() && ++elapsed%10==0) {
+            log_->Log(LogLevel::Info,"PERF server_flow mode=adaptive effective_bytes_per_sec="+
+                std::to_string(transferControl_->BytesPerSecond())+
+                " external_fraction="+std::to_string(external)+
+                " active="+std::to_string(transferControl_->Active()));
+        }
+    }
 }
 
 void ServerEngine::AcceptThreadProc() {
@@ -265,4 +320,18 @@ std::vector<std::pair<std::string, std::string>> ServerEngine::ClientList() cons
     return out;
 }
 
+} // namespace fsyn
+
+namespace fsyn {
+std::vector<ClientConnectionInfo> ServerEngine::ClientListDetails() const {
+    std::vector<ClientConnectionInfo> out;
+    std::lock_guard<std::mutex> g(sessionsMu_);
+    for (const auto& session : sessions_) {
+        if (session->IsAlive()) {
+            auto info = session->ConnectionInfo();
+            if (!info.hostKey.empty() && !info.ip.empty()) out.push_back(std::move(info));
+        }
+    }
+    return out;
+}
 } // namespace fsyn

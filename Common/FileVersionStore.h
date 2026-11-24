@@ -13,7 +13,9 @@
 #include "FileIo.h"
 #include "Crypto.h"
 #include "ShardedBaselineIndex.h"
+#include "DurabilityTelemetry.h"
 #include "DiskBaselineLookup.h"
+#include "ServerLsmBaselineIndex.h"
 #include <windows.h>
 #include <vector>
 #include <utility>
@@ -45,21 +47,74 @@ class FileVersionStore {
     }
     class BaselineFacade {
     public:
-        explicit BaselineFacade(const std::wstring& clientState) {
+        explicit BaselineFacade(const std::wstring& clientState)
+            : clientState_(clientState) {
+            const auto state=std::filesystem::path(clientState_);
+            const auto serverRoot=state.parent_path().parent_path().parent_path();
+            const auto marker=serverRoot/L".fsync_state"/L"baseline_lsm_v85"/L"ACTIVE_V85";
+            std::error_code ec;
             char mode[8]{};
-            if(GetEnvironmentVariableA("FILESYNC_EXPERIMENTAL_DISK_INDEX",mode,sizeof(mode))==1 &&
-               mode[0]=='1')
-                v8_=std::make_unique<DiskBaselineLookup>(clientState);
-            else
-                v7_=std::make_unique<ShardedBaselineIndex>(clientState);
+            const bool lsm=GetEnvironmentVariableA("FILESYNC_EXPERIMENTAL_LSM_WAL",mode,sizeof(mode))==1 &&
+                mode[0]=='1';
+            if(lsm) {
+                // Shared WAL across ALL clients of the same ServerRoot; one
+                // group fsync can publish multiple independent reservations.
+                static std::mutex sharedMu;
+                static std::map<std::wstring,std::weak_ptr<ServerLsmBaselineIndex>> shared;
+                std::lock_guard<std::mutex> g(sharedMu);
+                auto& ptr=shared[serverRoot.wstring()];
+                lsm_=ptr.lock();
+                if(!lsm_) {
+                    lsm_=std::make_shared<ServerLsmBaselineIndex>(serverRoot);
+                    ptr=lsm_;
+                }
+                bool hasLegacy=std::filesystem::exists(state/L"baseline.log",ec);
+                if(ec){blocked_=true;return;}
+                const auto oldDir=state/L"baseline_v7";
+                if(std::filesystem::exists(oldDir,ec)) {
+                    if(ec){blocked_=true;return;}
+                    for(const auto& entry:std::filesystem::directory_iterator(oldDir,ec)) {
+                        if(ec)break;
+                        if(entry.is_regular_file(ec)&&entry.path().extension()==L".bin"){
+                            hasLegacy=true;break;
+                        }
+                    }
+                }
+                if(ec){blocked_=true;return;}
+                if(hasLegacy)legacy_=std::make_unique<DiskBaselineLookup>(clientState_);
+            } else {
+                // Stop a silent downgrade from ignoring newer WAL reservations.
+                if(std::filesystem::exists(marker,ec)||ec){blocked_=true;return;}
+                if(GetEnvironmentVariableA("FILESYNC_EXPERIMENTAL_DISK_INDEX",mode,sizeof(mode))==1 &&
+                   mode[0]=='1')
+                    v8_=std::make_unique<DiskBaselineLookup>(clientState_);
+                else
+                    v7_=std::make_unique<ShardedBaselineIndex>(clientState_);
+            }
         }
         bool Find(const std::wstring& key,std::string& out) {
+            if(blocked_)return false;
+            if(lsm_) {
+                if(!lsm_->Find(clientState_,key,out))return false;
+                return !out.empty() || !legacy_ || legacy_->Find(key,out);
+            }
             return v8_?v8_->Find(key,out):v7_->Find(key,out);
         }
         bool Reserve(const std::wstring& key,const std::string& id) {
+            if(blocked_)return false;
+            if(lsm_) {
+                std::string existing;
+                if(!Find(key,existing))return false;
+                if(!existing.empty())return existing==id;
+                return lsm_->Reserve(clientState_,key,id);
+            }
             return v8_?v8_->Reserve(key,id):v7_->Reserve(key,id);
         }
     private:
+        std::filesystem::path clientState_;
+        bool blocked_=false;
+        std::shared_ptr<ServerLsmBaselineIndex> lsm_;
+        std::unique_ptr<DiskBaselineLookup> legacy_;
         std::unique_ptr<DiskBaselineLookup> v8_;
         std::unique_ptr<ShardedBaselineIndex> v7_;
     };
@@ -129,7 +184,12 @@ class FileVersionStore {
         if (h == INVALID_HANDLE_VALUE) return false;
         DWORD written = 0;
         bool ok = WriteFile(h, data.data(), static_cast<DWORD>(data.size()), &written, nullptr) &&
-                  written == data.size() && FlushFileBuffers(h);
+                  written == data.size();
+        if(ok) {
+            const auto started=durability::Clock::now();
+            ok=FlushFileBuffers(h)!=FALSE;
+            durability::RecordManifest(durability::Us(started));
+        }
         CloseHandle(h);
         if (!ok) { DeleteFileW(tmp.c_str()); return false; }
         ok = MoveFileExW(tmp.c_str(), manifest.c_str(),

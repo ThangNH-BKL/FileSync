@@ -4,6 +4,7 @@
 #include "Util.h"
 #include <shlobj.h>
 #include <shellapi.h>
+#include <vector>
 #pragma comment(lib, "Shell32.lib")
 
 static UINT WM_TASKBARCREATED = ::RegisterWindowMessageW(L"TaskbarCreated");
@@ -12,6 +13,22 @@ static UINT WM_TASKBARCREATED = ::RegisterWindowMessageW(L"TaskbarCreated");
 #define TRAY_CMD_OPEN 510
 #define TRAY_CMD_TOGGLE 511
 #define TRAY_CMD_EXIT 512
+
+// Always resolve against FileClient.exe, never the current working directory.
+static CStringW FileClientExecutableDirectory() {
+    std::vector<wchar_t> buf(512);
+    for (;;) {
+        const DWORD count = ::GetModuleFileNameW(nullptr, buf.data(), static_cast<DWORD>(buf.size()));
+        if (count == 0) return {};
+        if (count < static_cast<DWORD>(buf.size())) {
+            std::wstring full(buf.data(), count);
+            const auto slash = full.find_last_of(L"\\/");
+            return slash == std::wstring::npos ? CStringW() : CStringW(full.substr(0, slash).c_str());
+        }
+        if (buf.size() >= 32768) return {};
+        buf.resize(buf.size() * 2);
+    }
+}
 
 using namespace fsyn;
 
@@ -35,6 +52,7 @@ BEGIN_MESSAGE_MAP(CFClientDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BTN_START, &CFClientDlg::OnBnClickedBtnStart)
     ON_BN_CLICKED(IDC_BTN_STOP, &CFClientDlg::OnBnClickedBtnStop)
     ON_BN_CLICKED(IDC_BTN_BROWSE, &CFClientDlg::OnBnClickedBtnBrowse)
+    ON_WM_WINDOWPOSCHANGING()
     ON_WM_CLOSE()
     ON_WM_DESTROY()
     ON_WM_TIMER()
@@ -65,7 +83,11 @@ void CFClientDlg::LoadSettings() {
     CWinApp* app = AfxGetApp();
     GetDlgItem(IDC_EDIT_IP)->SetWindowTextW(app->GetProfileString(L"Client", L"ServerIp", L"127.0.0.1"));
     GetDlgItem(IDC_EDIT_PORT)->SetWindowTextW(app->GetProfileString(L"Client", L"Port", L"9000"));
-    GetDlgItem(IDC_EDIT_WATCH)->SetWindowTextW(app->GetProfileString(L"Client", L"WatchRoot", L""));
+    // Explicit requirement: default to the directory containing FileClient.exe
+    // every time the application starts. Browse remains an optional session override.
+    CStringW exeDir = FileClientExecutableDirectory();
+    GetDlgItem(IDC_EDIT_WATCH)->SetWindowTextW(exeDir.IsEmpty()
+        ? app->GetProfileString(L"Client", L"WatchRoot", L"") : exeDir);
     GetDlgItem(IDC_EDIT_TOKEN)->SetWindowTextW(app->GetProfileString(L"Client", L"Token", L"secret"));
 }
 
@@ -175,8 +197,19 @@ void CFClientDlg::OnBnClickedBtnStop() {
     AppendLog("Client stopped.");
 }
 
+void CFClientDlg::OnWindowPosChanging(WINDOWPOS* lpwndpos) {
+    // MFC DoModal may show a new dialog after WM_INITDIALOG. Block that
+    // initial show while the tray icon is installed; no brief flashing window.
+    if (trayInstalled_ && !allowDialogVisible_ && (lpwndpos->flags & SWP_SHOWWINDOW)) {
+        lpwndpos->flags &= ~SWP_SHOWWINDOW;
+        lpwndpos->flags |= SWP_HIDEWINDOW;
+    }
+    CDialogEx::OnWindowPosChanging(lpwndpos);
+}
+
 void CFClientDlg::OnClose() {
     if (!exiting_) {
+        allowDialogVisible_ = false;
         ShowWindow(SW_HIDE);
         return;
     }
@@ -216,6 +249,7 @@ void CFClientDlg::RemoveTrayIcon() {
 }
 
 void CFClientDlg::ShowMainWindow() {
+    allowDialogVisible_ = true;
     ShowWindow(SW_SHOW);
     ShowWindow(SW_RESTORE);
     SetForegroundWindow();
@@ -257,7 +291,13 @@ LRESULT CFClientDlg::OnTrayIcon(WPARAM, LPARAM lp) {
 
 LRESULT CFClientDlg::OnTrayStartup(WPARAM, LPARAM) {
     // Hide the window and start synchronization using saved settings.
-    if (trayInstalled_) ShowWindow(SW_HIDE);
+    if (trayInstalled_) {
+        allowDialogVisible_ = false;
+        ShowWindow(SW_HIDE);
+    } else {
+        // Don't strand a hidden process if Windows notification area failed.
+        ShowMainWindow();
+    }
     OnBnClickedBtnStart();
     return 0;
 }

@@ -1,4 +1,4 @@
-#include "resource.h"
+﻿#include "resource.h"
 #include "afxres.h"
 #include <commctrl.h>
 #include "verrsrc.h"
@@ -17,21 +17,32 @@ BEGIN
     LTEXT           "Root:", -1, 8, 30, 24, 12
     EDITTEXT        IDC_EDIT_ROOT, 36, 28, 400, 14, ES_AUTOHSCROLL
     PUSHBUTTON      "Browse...", IDC_BTN_BROWSE, 442, 28, 50, 14
+    LTEXT           "Max clients:", -1, 500, 30, 56, 12
+    EDITTEXT        IDC_EDIT_MAX_CLIENTS, 557, 28, 43, 14, ES_AUTOHSCROLL | ES_NUMBER | WS_TABSTOP
+    LTEXT           "Active files:", -1, 605, 30, 59, 12
+    EDITTEXT        IDC_EDIT_ACTIVE_TRANSFERS, 667, 28, 26, 14, ES_AUTOHSCROLL | ES_NUMBER | WS_TABSTOP
     PUSHBUTTON      "Start", IDC_BTN_START, 500, 8, 60, 14
     PUSHBUTTON      "Stop", IDC_BTN_STOP, 566, 8, 60, 14
-    LTEXT           "Filter:", -1, 8, 50, 30, 12
-    EDITTEXT        IDC_EDIT_FILTER, 36, 48, 160, 14, ES_AUTOHSCROLL
-    CONTROL         "Enable schedule", IDC_CHECK_SCHEDULE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 212, 48, 120, 14
+    LTEXT           "Files:", -1, 8, 50, 34, 12
+    CONTROL         "XML", IDC_CHECK_FILTER_XML, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 42, 48, 48, 14
+    CONTROL         "JSON", IDC_CHECK_FILTER_JSON, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 92, 48, 52, 14
+    CONTROL         "RAW", IDC_CHECK_FILTER_RAW, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 146, 48, 50, 14
+    CONTROL         "INI", IDC_CHECK_FILTER_INI, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 198, 48, 42, 14
+    CONTROL         "RTF", IDC_CHECK_FILTER_RTF, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 242, 48, 44, 14
+    CONTROL         "Other", IDC_CHECK_FILTER_OTHER, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 289, 48, 52, 14
+    EDITTEXT        IDC_EDIT_FILTER, 343, 48, 154, 14, ES_AUTOHSCROLL
+    CONTROL         "All (*)", IDC_CHECK_FILTER_ALL, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 501, 48, 72, 14
+    CONTROL         "Schedule", IDC_CHECK_SCHEDULE, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 579, 48, 100, 14
     LTEXT           "Start:", -1, 8, 70, 34, 12
     CONTROL         "", IDC_DTP_START_DATE, "SysDateTimePick32", DTS_SHORTDATEFORMAT | WS_TABSTOP, 45, 67, 94, 17
     CONTROL         "", IDC_DTP_START_TIME, "SysDateTimePick32", DTS_TIMEFORMAT | DTS_UPDOWN | WS_TABSTOP, 143, 67, 76, 17
     LTEXT           "End:", -1, 237, 70, 28, 12
     CONTROL         "", IDC_DTP_END_DATE, "SysDateTimePick32", DTS_SHORTDATEFORMAT | WS_TABSTOP, 266, 67, 94, 17
     CONTROL         "", IDC_DTP_END_TIME, "SysDateTimePick32", DTS_TIMEFORMAT | DTS_UPDOWN | WS_TABSTOP, 364, 67, 76, 17
-    LTEXT           "Clients:", -1, 8, 92, 40, 12
-    CONTROL         "", IDC_LIST_CLIENTS, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP, 8, 106, 282, 160
-    LTEXT           "Tree:", -1, 298, 92, 24, 12
-    CONTROL         "", IDC_TREE_FILES, "SysTreeView32", TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT | WS_BORDER | WS_TABSTOP, 298, 106, 394, 160
+    LTEXT           "Clients (double-click HostKey):", -1, 8, 92, 204, 12
+    CONTROL         "", IDC_LIST_CLIENTS, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP, 8, 106, 343, 160
+    LTEXT           "Tree (double-click: Server folder):", -1, 358, 92, 178, 12
+    CONTROL         "", IDC_TREE_FILES, "SysTreeView32", TVS_HASLINES | TVS_HASBUTTONS | TVS_LINESATROOT | WS_BORDER | WS_TABSTOP, 358, 106, 334, 160
     LTEXT           "Processed: 0 / 0 files (0%)", IDC_STATIC_PROGRESS, 8, 273, 400, 12
     CONTROL         "", IDC_PROGRESS_FILES, "msctls_progress32", PBS_SMOOTH | WS_BORDER, 8, 289, 684, 16
     LTEXT           "Updated: 0   Unchanged: 0   Active: 0   Pending: 0   Failed: 0", IDC_STATIC_PROGRESS_DETAIL, 8, 311, 682, 12

@@ -2,6 +2,10 @@
 #include "DurableEventLog.h"
 #include "DiskBaselineLookup.h"
 #include "UsnJournalGuard.h"
+#include "AdaptiveServerPolicy.h"
+#include "DurabilityTelemetry.h"
+#include "StageFlushPolicy.h"
+#include "AdaptiveSleepPolicy.h"
 #include <filesystem>
 #include <fstream>
 #include <windows.h>
@@ -40,4 +44,43 @@ TEST(v8_usn_checkpoint_rejects_journal_wrap_or_replacement) {
     EXPECT_FALSE(IsUsnCursorUsable(now,{99,129}));
     EXPECT_FALSE(IsUsnCursorUsable(now,{98,350}));
     EXPECT_FALSE(IsUsnCursorUsable(now,{99,501}));
+}
+
+TEST(v84_adaptive_server_flow_converges_within_bounds) {
+    AdaptiveServerPolicy p(1ull<<20,10ull<<20,4ull<<20);
+    AdaptiveServerPolicy::Sample sample{};
+    sample.externalFraction=0.02;sample.activeTransfers=3;
+    for(unsigned i=0;i<100;++i) p.Step(sample);
+    EXPECT_EQ(p.Rate(),10ull<<20);
+    sample.externalFraction=0.9;
+    for(unsigned i=0;i<100;++i) p.Step(sample);
+    EXPECT_EQ(p.Rate(),1ull<<20);
+    sample.externalFraction=-1.0;
+    EXPECT_EQ(p.Step(sample),1ull<<20);
+    sample.externalFraction=0.1;sample.flushCount=10;
+    sample.flushUs=1000000;sample.activeTransfers=3;
+    EXPECT_EQ(p.Step(sample),1ull<<20);
+}
+TEST(v84_metadata_durability_telemetry_is_non_mutating) {
+    const auto before=durability::Read();
+    durability::RecordBaseline(3);
+    durability::RecordManifest(5);
+    const auto after=durability::Read();
+    EXPECT_EQ(after.baselineCount,before.baselineCount+1);
+    EXPECT_EQ(after.manifestCount,before.manifestCount+1);
+    EXPECT_EQ(after.baselineUs,before.baselineUs+3);
+    EXPECT_EQ(after.manifestUs,before.manifestUs+5);
+}
+
+TEST(v84_stage_flush_default_and_batch_decisions) {
+    EXPECT_TRUE(ShouldFlushStageLiteral(65536,0)); // Default: each literal.
+    EXPECT_FALSE(ShouldFlushStageLiteral(65536,4ull*1024*1024));
+    EXPECT_TRUE(ShouldFlushStageLiteral(4ull*1024*1024,4ull*1024*1024));
+    EXPECT_TRUE(ShouldFlushStageLiteral(4ull*1024*1024+65536,4ull*1024*1024));
+}
+
+TEST(v84_client_sleep_slice_keeps_40pct_rate_without_50ms_oversleep) {
+    EXPECT_EQ(AdaptiveWaitSlice(std::chrono::milliseconds(1)).count(),1ll);
+    EXPECT_EQ(AdaptiveWaitSlice(std::chrono::milliseconds(12)).count(),12ll);
+    EXPECT_EQ(AdaptiveWaitSlice(std::chrono::milliseconds(100)).count(),20ll);
 }

@@ -60,6 +60,12 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="AdaptiveServerPolicy.h" />
+    <ClInclude Include="ServerNetworkSampler.h" />
+    <ClInclude Include="ServerLimitSettings.h" />
+    <ClInclude Include="DurabilityTelemetry.h" />
+    <ClInclude Include="StageFlushPolicy.h" />
+    <ClInclude Include="AdaptiveSleepPolicy.h" />
     <ClInclude Include="ClientPresence.h" />
     <ClInclude Include="TransferProgress.h" />
     <ClInclude Include="ByteRangeDelta.h" />
@@ -70,6 +76,8 @@
     <ClInclude Include="DurableEventLog.h" />
     <ClInclude Include="UsnJournalGuard.h" />
     <ClInclude Include="DiskBaselineLookup.h" />
+    <ClInclude Include="DurableWalGroupCommit.h" />
+    <ClInclude Include="ServerLsmBaselineIndex.h" />
     <ClInclude Include="IocpAcceptLoop.h" />
     <ClInclude Include="GlobalTransferControl.h" />
     <ClInclude Include="DiskSnapshotSpool.h" />

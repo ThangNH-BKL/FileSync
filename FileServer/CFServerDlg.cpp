@@ -2,12 +2,19 @@
 #include "CFServerDlg.h"
 #include "resource.h"
 #include "Util.h"
+#include "FilterSelection.h"
+#include "ServerLimitSettings.h"
+#include "UiNetworkPath.h"
+#include "UiServerTreePath.h"
+#include "PathSanitizer.h"
 #include <shlobj.h>
 #include <shellapi.h>
 #include <thread>
 #include <ctime>
 #include <cwchar>
 #include <chrono>
+#include <algorithm>
+#include <system_error>
 #pragma comment(lib, "Shell32.lib")
 
 static UINT WM_TASKBARCREATED = ::RegisterWindowMessageW(L"TaskbarCreated");
@@ -24,6 +31,7 @@ using namespace fsyn;
 #define WM_APP_CLIENTLIST    (WM_APP + 103)
 #define WM_APP_TREEUPD       (WM_APP + 104)
 #define WM_APP_STOP_COMPLETE (WM_APP + 105)
+#define WM_APP_CLIENT_FOLDER_RESULT (WM_APP + 106)
 
 CFServerDlg::CFServerDlg(CWnd* pParent)
     : CDialogEx(IDD_FILESERVER_DIALOG, pParent) {}
@@ -50,6 +58,9 @@ BEGIN_MESSAGE_MAP(CFServerDlg, CDialogEx)
     ON_BN_CLICKED(IDC_BTN_STOP, &CFServerDlg::OnBnClickedBtnStop)
     ON_BN_CLICKED(IDC_BTN_BROWSE, &CFServerDlg::OnBnClickedBtnBrowse)
     ON_BN_CLICKED(IDC_CHECK_SCHEDULE, &CFServerDlg::OnBnClickedScheduleToggle)
+    ON_CONTROL_RANGE(BN_CLICKED, IDC_CHECK_FILTER_XML, IDC_CHECK_FILTER_ALL, &CFServerDlg::OnBnClickedFilterOption)
+    ON_NOTIFY(NM_DBLCLK, IDC_LIST_CLIENTS, &CFServerDlg::OnNmDblClickClients)
+    ON_NOTIFY(NM_DBLCLK, IDC_TREE_FILES, &CFServerDlg::OnNmDblClickTree)
     ON_WM_CLOSE()
     ON_WM_DESTROY()
     ON_MESSAGE(WM_TRAY_ICON, &CFServerDlg::OnTrayIcon)
@@ -60,16 +71,17 @@ BEGIN_MESSAGE_MAP(CFServerDlg, CDialogEx)
     ON_MESSAGE(WM_APP_CLIENTLIST, &CFServerDlg::OnAppClientList)
     ON_MESSAGE(WM_APP_TREEUPD, &CFServerDlg::OnAppTreeUpdate)
     ON_MESSAGE(WM_APP_STOP_COMPLETE, &CFServerDlg::OnAppStopComplete)
+    ON_MESSAGE(WM_APP_CLIENT_FOLDER_RESULT, &CFServerDlg::OnAppClientFolderResult)
     ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 BOOL CFServerDlg::OnInitDialog() {
     CDialogEx::OnInitDialog();
-    SetWindowText(_T("FileServer - File Sync"));
+    SetWindowText(_T("FileServer V8.6.5 - File Sync"));
 
     // The status icon is shown beside HostKey; the final column also shows
     // Online/Offline in text (useful when the user cannot distinguish colors).
-    listClients_.InsertColumn(0, _T("HostKey"), LVCFMT_LEFT, 118);
+    listClients_.InsertColumn(0, _T("HostKey (IP | client full path)"), LVCFMT_LEFT, 390);
     listClients_.InsertColumn(1, _T("IP"), LVCFMT_LEFT, 88);
     listClients_.InsertColumn(2, _T("Status"), LVCFMT_LEFT, 66);
     listClients_.SetExtendedStyle(listClients_.GetExtendedStyle() |
@@ -96,6 +108,9 @@ BOOL CFServerDlg::OnInitDialog() {
     // Giới hạn log
     listLog_.InitStorage(5000, 256);
 
+    // Numeric fields use explicit bounds in addition to ES_NUMBER, not _wtoi.
+    SendDlgItemMessage(IDC_EDIT_MAX_CLIENTS, EM_LIMITTEXT, 4, 0);
+    SendDlgItemMessage(IDC_EDIT_ACTIVE_TRANSFERS, EM_LIMITTEXT, 2, 0);
     LoadSettings();
     EnableConfig(true);
     UpdateStatus(_T("Status: Idle"));
@@ -109,9 +124,15 @@ BOOL CFServerDlg::OnInitDialog() {
 void CFServerDlg::EnableConfig(bool enabled) {
     GetDlgItem(IDC_EDIT_PORT)->EnableWindow(enabled);
     GetDlgItem(IDC_EDIT_TOKEN)->EnableWindow(enabled);
+    GetDlgItem(IDC_EDIT_MAX_CLIENTS)->EnableWindow(enabled);
+    GetDlgItem(IDC_EDIT_ACTIVE_TRANSFERS)->EnableWindow(enabled);
     GetDlgItem(IDC_EDIT_ROOT)->EnableWindow(enabled);
     GetDlgItem(IDC_BTN_BROWSE)->EnableWindow(enabled);
-    GetDlgItem(IDC_EDIT_FILTER)->EnableWindow(enabled);
+    const UINT filterIds[] = { IDC_CHECK_FILTER_XML, IDC_CHECK_FILTER_JSON,
+        IDC_CHECK_FILTER_RAW, IDC_CHECK_FILTER_INI, IDC_CHECK_FILTER_RTF,
+        IDC_CHECK_FILTER_OTHER, IDC_CHECK_FILTER_ALL };
+    for (const UINT id : filterIds) GetDlgItem(id)->EnableWindow(enabled);
+    UpdateFilterControls();
     scheduleCheckbox_.EnableWindow(enabled);
     const bool dateEnabled = enabled && scheduleCheckbox_.GetCheck() == BST_CHECKED;
     scheduleStartDate_.EnableWindow(dateEnabled);
@@ -126,10 +147,37 @@ void CFServerDlg::LoadSettings() {
     CWinApp* app = AfxGetApp();
     GetDlgItem(IDC_EDIT_PORT)->SetWindowTextW(app->GetProfileString(L"Server", L"Port", L"9000"));
     GetDlgItem(IDC_EDIT_TOKEN)->SetWindowTextW(app->GetProfileString(L"Server", L"Token", L"secret"));
+    // Values saved by older versions are absent: restore the tested defaults.
+    const auto readLimit = [&](LPCWSTR key, LPCWSTR fallback, unsigned lo, unsigned hi, UINT id) {
+        CStringW stored = app->GetProfileString(L"Server", key, fallback);
+        unsigned value = 0;
+        if (!fsyn::ui_server_limits::Parse(static_cast<LPCWSTR>(stored), lo, hi, value))
+            stored = fallback;
+        GetDlgItem(id)->SetWindowTextW(stored);
+    };
+    readLimit(L"MaxClients", L"512", fsyn::ui_server_limits::kMinClients,
+              fsyn::ui_server_limits::kMaxClients, IDC_EDIT_MAX_CLIENTS);
+    readLimit(L"MaxActiveTransfers", L"12", fsyn::ui_server_limits::kMinTransfers,
+              fsyn::ui_server_limits::kMaxTransfers, IDC_EDIT_ACTIVE_TRANSFERS);
     CString root = app->GetProfileString(L"Server", L"Root", L"");
     GetDlgItem(IDC_EDIT_ROOT)->SetWindowTextW(root);
     rootUtf16_ = (LPCWSTR)root;
-    GetDlgItem(IDC_EDIT_FILTER)->SetWindowTextW(app->GetProfileString(L"Server", L"Filter", L"*"));
+    const CStringW savedFilter = app->GetProfileString(L"Server", L"Filter", L"*");
+    const auto parsed = fsyn::ui_filter::Parse(fsyn::WideToUtf8(static_cast<LPCWSTR>(savedFilter)));
+    // Keep the previous extension choices separately from the active ALL filter.
+    // A saved '*' must not destroy the user's XML/JSON/RAW/... selections.
+    const CStringW savedDraft = app->GetProfileString(L"Server", L"FilterLastSelection", L"");
+    const auto prior = fsyn::ui_filter::Parse(fsyn::WideToUtf8(static_cast<LPCWSTR>(savedDraft)));
+    const auto displayed = savedDraft.IsEmpty() ? parsed : fsyn::ui_filter::DisplaySelection(parsed, prior);
+    CheckDlgButton(IDC_CHECK_FILTER_XML, displayed.xml ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_CHECK_FILTER_JSON, displayed.json ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_CHECK_FILTER_RAW, displayed.raw ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_CHECK_FILTER_INI, displayed.ini ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_CHECK_FILTER_RTF, displayed.rtf ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_CHECK_FILTER_OTHER, displayed.other ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton(IDC_CHECK_FILTER_ALL, parsed.all ? BST_CHECKED : BST_UNCHECKED);
+    GetDlgItem(IDC_EDIT_FILTER)->SetWindowTextW(fsyn::Utf8ToWide(displayed.custom).c_str());
+    UpdateFilterControls();
     // New one-shot schedule settings. Legacy Window/Cycle settings are intentionally ignored.
     scheduleCheckbox_.SetCheck(app->GetProfileInt(L"ScheduleOnce", L"Enabled", 0) ? BST_CHECKED : BST_UNCHECKED);
     auto loadTime = [&](LPCWSTR key, CDateTimeCtrl& date, CDateTimeCtrl& time) {
@@ -159,8 +207,26 @@ void CFServerDlg::SaveSettings() {
     CString s;
     GetDlgItem(IDC_EDIT_PORT)->GetWindowTextW(s);        app->WriteProfileString(L"Server", L"Port", s);
     GetDlgItem(IDC_EDIT_TOKEN)->GetWindowTextW(s);       app->WriteProfileString(L"Server", L"Token", s);
+    GetDlgItem(IDC_EDIT_MAX_CLIENTS)->GetWindowTextW(s); app->WriteProfileString(L"Server", L"MaxClients", s);
+    GetDlgItem(IDC_EDIT_ACTIVE_TRANSFERS)->GetWindowTextW(s); app->WriteProfileString(L"Server", L"MaxActiveTransfers", s);
     GetDlgItem(IDC_EDIT_ROOT)->GetWindowTextW(s);        app->WriteProfileString(L"Server", L"Root", s);
-    GetDlgItem(IDC_EDIT_FILTER)->GetWindowTextW(s);      app->WriteProfileString(L"Server", L"Filter", s);
+    CStringW filter, error;
+    if (BuildSelectedFilter(filter, error)) app->WriteProfileString(L"Server", L"Filter", filter);
+    // Persist the previous explicit choices even when '*' is currently active.
+    fsyn::ui_filter::Selection draft;
+    draft.xml = IsDlgButtonChecked(IDC_CHECK_FILTER_XML) == BST_CHECKED;
+    draft.json = IsDlgButtonChecked(IDC_CHECK_FILTER_JSON) == BST_CHECKED;
+    draft.raw = IsDlgButtonChecked(IDC_CHECK_FILTER_RAW) == BST_CHECKED;
+    draft.ini = IsDlgButtonChecked(IDC_CHECK_FILTER_INI) == BST_CHECKED;
+    draft.rtf = IsDlgButtonChecked(IDC_CHECK_FILTER_RTF) == BST_CHECKED;
+    draft.other = IsDlgButtonChecked(IDC_CHECK_FILTER_OTHER) == BST_CHECKED;
+    CStringW custom;
+    GetDlgItem(IDC_EDIT_FILTER)->GetWindowTextW(custom);
+    draft.custom = fsyn::WideToUtf8(static_cast<LPCWSTR>(custom));
+    std::string draftSpec, draftError;
+    if (fsyn::ui_filter::Compose(draft, draftSpec, draftError)) {
+        app->WriteProfileString(L"Server", L"FilterLastSelection", fsyn::Utf8ToWide(draftSpec).c_str());
+    }
     app->WriteProfileInt(L"ScheduleOnce", L"Enabled", scheduleCheckbox_.GetCheck() == BST_CHECKED ? 1 : 0);
     auto saveTime = [&](LPCWSTR key, const CDateTimeCtrl& date, const CDateTimeCtrl& time) {
         SYSTEMTIME d{}, t{};
@@ -174,6 +240,58 @@ void CFServerDlg::SaveSettings() {
     };
     saveTime(L"StartLocal", scheduleStartDate_, scheduleStartTime_);
     saveTime(L"EndLocal", scheduleEndDate_, scheduleEndTime_);
+}
+
+void CFServerDlg::UpdateFilterControls() {
+    const bool enabled = !running_ && !stopping_ && !scheduleWaiting_;
+    const bool other = IsDlgButtonChecked(IDC_CHECK_FILTER_OTHER) == BST_CHECKED;
+    const bool all = IsDlgButtonChecked(IDC_CHECK_FILTER_ALL) == BST_CHECKED;
+    const auto controlState = fsyn::ui_filter::GetControlState(enabled, all, other);
+    // ALL (*) keeps all options visible, but locks them for both mouse and keyboard.
+    // Do not erase checked states; they are restored as soon as ALL is unchecked.
+    const UINT extensionIds[] = { IDC_CHECK_FILTER_XML, IDC_CHECK_FILTER_JSON,
+        IDC_CHECK_FILTER_RAW, IDC_CHECK_FILTER_INI, IDC_CHECK_FILTER_RTF,
+        IDC_CHECK_FILTER_OTHER };
+    for (const UINT id : extensionIds) {
+        if (auto* control = GetDlgItem(id)) {
+            control->ShowWindow(SW_SHOW);
+            control->EnableWindow(controlState.extensionOptionsEnabled);
+        }
+    }
+    if (auto* edit = GetDlgItem(IDC_EDIT_FILTER)) {
+        edit->ShowWindow(SW_SHOW);
+        edit->EnableWindow(controlState.customEditorEnabled);
+    }
+}
+
+void CFServerDlg::OnBnClickedFilterOption(UINT nID) {
+    // Other options cannot be clicked when ALL is checked, so no need to
+    // forcibly clear their state. Keep them for the next time ALL is off.
+    if (nID != IDC_CHECK_FILTER_ALL) {
+        CheckDlgButton(IDC_CHECK_FILTER_ALL, BST_UNCHECKED);
+    }
+    UpdateFilterControls();
+}
+
+bool CFServerDlg::BuildSelectedFilter(CStringW& result, CStringW& validationMessage) {
+    fsyn::ui_filter::Selection selected;
+    selected.all = IsDlgButtonChecked(IDC_CHECK_FILTER_ALL) == BST_CHECKED;
+    selected.xml = IsDlgButtonChecked(IDC_CHECK_FILTER_XML) == BST_CHECKED;
+    selected.json = IsDlgButtonChecked(IDC_CHECK_FILTER_JSON) == BST_CHECKED;
+    selected.raw = IsDlgButtonChecked(IDC_CHECK_FILTER_RAW) == BST_CHECKED;
+    selected.ini = IsDlgButtonChecked(IDC_CHECK_FILTER_INI) == BST_CHECKED;
+    selected.rtf = IsDlgButtonChecked(IDC_CHECK_FILTER_RTF) == BST_CHECKED;
+    selected.other = IsDlgButtonChecked(IDC_CHECK_FILTER_OTHER) == BST_CHECKED;
+    CStringW custom;
+    GetDlgItem(IDC_EDIT_FILTER)->GetWindowTextW(custom);
+    selected.custom = fsyn::WideToUtf8(static_cast<LPCWSTR>(custom));
+    std::string out, error;
+    if (!fsyn::ui_filter::Compose(selected, out, error)) {
+        validationMessage = fsyn::Utf8ToWide(error).c_str();
+        return false;
+    }
+    result = fsyn::Utf8ToWide(out).c_str();
+    return true;
 }
 
 void CFServerDlg::OnBnClickedBtnBrowse() {
@@ -259,14 +377,34 @@ void CFServerDlg::OnBnClickedBtnStart() {
 void CFServerDlg::BeginSchedule(bool autoLaunch) {
     if (running_ || scheduleWaiting_ || stopping_ || exiting_) return;
 
-    CString sPort, sToken, sRoot, sFilter;
+    CString sPort, sToken, sRoot;
+    CStringW sFilter, filterError;
     GetDlgItem(IDC_EDIT_PORT)->GetWindowTextW(sPort);
     GetDlgItem(IDC_EDIT_TOKEN)->GetWindowTextW(sToken);
     GetDlgItem(IDC_EDIT_ROOT)->GetWindowTextW(sRoot);
-    GetDlgItem(IDC_EDIT_FILTER)->GetWindowTextW(sFilter);
+    if (!BuildSelectedFilter(sFilter, filterError)) {
+        if (!autoLaunch) MessageBox(filterError, L"File type filter", MB_ICONERROR);
+        else UpdateStatus(L"Status: Invalid file extension filter");
+        return;
+    }
     if (sRoot.IsEmpty() || _wtoi(sPort) <= 0 || _wtoi(sPort) > 65535 || sToken.IsEmpty()) {
         if (!autoLaunch) MessageBox(L"Please configure a valid port, token and root folder.", L"FileServer", MB_ICONERROR);
         else UpdateStatus(L"Status: Configure Server before starting");
+        return;
+    }
+    CStringW clientLimitText, transferLimitText;
+    GetDlgItem(IDC_EDIT_MAX_CLIENTS)->GetWindowTextW(clientLimitText);
+    GetDlgItem(IDC_EDIT_ACTIVE_TRANSFERS)->GetWindowTextW(transferLimitText);
+    unsigned maxClients = 0, maxTransfers = 0;
+    if (!fsyn::ui_server_limits::Parse(static_cast<LPCWSTR>(clientLimitText),
+                                      fsyn::ui_server_limits::kMinClients,
+                                      fsyn::ui_server_limits::kMaxClients, maxClients) ||
+        !fsyn::ui_server_limits::Parse(static_cast<LPCWSTR>(transferLimitText),
+                                      fsyn::ui_server_limits::kMinTransfers,
+                                      fsyn::ui_server_limits::kMaxTransfers, maxTransfers)) {
+        if (!autoLaunch) MessageBox(L"Max clients must be 1-4096 and Active files must be 1-64.",
+                                    L"Invalid server limits", MB_ICONERROR);
+        else UpdateStatus(L"Status: Invalid client/active-file limits in Server settings");
         return;
     }
 
@@ -277,7 +415,10 @@ void CFServerDlg::BeginSchedule(bool autoLaunch) {
     cfg.port = static_cast<uint16_t>(_wtoi(sPort));
     cfg.token = CStringA(sToken);
     cfg.serverRootUtf16 = static_cast<LPCWSTR>(sRoot);
-    cfg.extFilterSpec = CStringA(sFilter);
+    cfg.extFilterSpec = fsyn::WideToUtf8(static_cast<LPCWSTR>(sFilter));
+    cfg.maxClients = maxClients;
+    cfg.maxActiveTransfers = maxTransfers;
+    cfg.limitsFromDialog = true; // GUI values win over legacy FILESYNC_MAX_CLIENTS / ACTIVE_TRANSFERS
     cfg.sched.mode = fsyn::SchedMode::Window;
     cfg.sched.windowStartMin = 0;
     cfg.sched.windowEndMin = 0;
@@ -419,6 +560,13 @@ void CFServerDlg::OnClose() {
 }
 
 void CFServerDlg::OnDestroy() {
+    // A pending SMB probe may still be blocked by an offline host. Never let
+    // its background thread access the dialog or post to a destroyed window.
+    {
+        std::lock_guard<std::mutex> guard(folderProbe_->mu);
+        folderProbe_->alive = false;
+        folderProbe_->window = nullptr;
+    }
     KillTimer(kTreeTimerId);
     RemoveTrayIcon();
     // The ListView does not own its small image list.
@@ -436,7 +584,7 @@ void CFServerDlg::InstallTrayIcon() {
     trayIcon_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     trayIcon_.uCallbackMessage = WM_TRAY_ICON;
     trayIcon_.hIcon = ::LoadIconW(nullptr, IDI_APPLICATION);
-    wcscpy_s(trayIcon_.szTip, _countof(trayIcon_.szTip), L"FileServer - FileSync");
+    wcscpy_s(trayIcon_.szTip, _countof(trayIcon_.szTip), L"FileServer V8.6.5 - FileSync");
     trayInstalled_ = Shell_NotifyIconW(NIM_ADD, &trayIcon_) != FALSE;
     if (trayInstalled_) {
         trayIcon_.uVersion = NOTIFYICON_VERSION_4;
@@ -665,31 +813,31 @@ void CFServerDlg::UpdateClientStatusIcons() {
 }
 
 void CFServerDlg::RefreshClientList() {
-    const std::vector<std::pair<std::string, std::string>> live =
-        engine_ ? engine_->ClientList() : std::vector<std::pair<std::string, std::string>>{};
-    clientPresence_.Reconcile(live);
+    const std::vector<fsyn::ClientConnectionInfo> live =
+        engine_ ? engine_->ClientListDetails() : std::vector<fsyn::ClientConnectionInfo>{};
+    clientPresence_.ReconcileDetailed(live);
     const auto& entries = clientPresence_.Entries();
     // Never DeleteAllItems() here: disconnected IPs must remain visible in red.
     for (size_t i = 0; i < entries.size(); ++i) {
         const auto& entry = entries[i];
         const int row = static_cast<int>(i);
+        const CStringW ip = fsyn::Utf8ToWide(entry.ip).c_str();
+        const CStringW watchRoot = fsyn::Utf8ToWide(entry.watchRoot).c_str();
+        CStringW hostLabel;
+        if (!watchRoot.IsEmpty()) hostLabel.Format(L"%s | %s", static_cast<LPCWSTR>(ip), static_cast<LPCWSTR>(watchRoot));
+        else hostLabel.Format(L"%s | (WatchRoot unavailable)", static_cast<LPCWSTR>(ip));
         if (row >= listClients_.GetItemCount()) {
-            LVITEMW item{};
-            CStringW host(entry.hostKey.c_str());
-            item.mask = LVIF_TEXT | LVIF_IMAGE;
-            item.iItem = row;
-            item.iSubItem = 0;
-            item.pszText = host.GetBuffer();
-            item.iImage = fsyn::ClientPresence::IconIndex(entry.online, clientIconsBright_);
-            listClients_.InsertItem(&item);
-            host.ReleaseBuffer();
-            listClients_.SetItemText(row, 1, CStringW(entry.ip.c_str()));
+            // Show IP/executable-folder in the Tree immediately on connection,
+            // even before the first data file has been transferred.
+            AddTreePath(entry.hostKey);
+            listClients_.InsertItem(row, hostLabel);
+            listClients_.SetItemText(row, 1, ip);
             listClients_.SetItemText(row, 2, entry.online ? L"Online" : L"Offline");
         } else {
+            if (listClients_.GetItemText(row, 0) != hostLabel) listClients_.SetItemText(row, 0, hostLabel);
+            if (listClients_.GetItemText(row, 1) != ip) listClients_.SetItemText(row, 1, ip);
             const CString expected = entry.online ? L"Online" : L"Offline";
-            if (listClients_.GetItemText(row, 2) != expected) {
-                listClients_.SetItemText(row, 2, expected);
-            }
+            if (listClients_.GetItemText(row, 2) != expected) listClients_.SetItemText(row, 2, expected);
         }
     }
     UpdateClientStatusIcons();
@@ -697,7 +845,7 @@ void CFServerDlg::RefreshClientList() {
 
 void CFServerDlg::AddTreePath(const std::string& relPath) {
     if (!treeRoot_) return;
-    CStringW full(relPath.c_str());
+    CStringW full(fsyn::Utf8ToWide(relPath).c_str());
     int start = 0;
     HTREEITEM parent = treeRoot_;
     std::wstring key;
@@ -715,6 +863,248 @@ void CFServerDlg::AddTreePath(const std::string& relPath) {
         }
         if (slash < 0) break;
         start = slash + 1;
+    }
+}
+
+namespace {
+std::wstring ExplainNetworkError(DWORD code) {
+    wchar_t* systemMessage = nullptr;
+    const DWORD length = ::FormatMessageW(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
+            FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr, code, 0, reinterpret_cast<LPWSTR>(&systemMessage), 0, nullptr);
+    std::wstring result;
+    if (length && systemMessage) result.assign(systemMessage, length);
+    if (systemMessage) ::LocalFree(systemMessage);
+    while (!result.empty() && (result.back() == L'\r' || result.back() == L'\n'))
+        result.pop_back();
+    return result;
+}
+}
+
+void CFServerDlg::OpenClientDataFolder(const fsyn::ClientPresence::Entry& entry) {
+    // WatchRoot is informational only; it must never change ServerRoot or the
+    // persistent hostKey/storage layout. The IP is the authenticated TCP peer.
+    const std::wstring localRoot = fsyn::Utf8ToWide(entry.watchRoot);
+    const auto paths = fsyn::ui_path::CandidateSharePaths(entry.ip, localRoot);
+    if (paths.empty()) {
+        CStringW msg;
+        msg.Format(L"Cannot construct a safe SMB folder path.\n\n"
+                   L"Client IP: %s\nClient WatchRoot: %s\n\n"
+                   L"Only absolute drive paths are supported (e.g. D:\\Project_Codex). "
+                   L"A normal SMB share (\\\\IP\\D\\...) is tried first. "
+                   L"No Server folder will be opened as fallback.",
+                   fsyn::Utf8ToWide(entry.ip).c_str(), localRoot.c_str());
+        MessageBox(msg, L"Cannot open Client folder", MB_ICONWARNING);
+        return;
+    }
+
+    // An Explorer process may start successfully and still open Documents if
+    // passed a nonexistent UNC argument. Probe the *actual directory* on a
+    // worker, then ShellExecuteEx the UNC itself only on success.
+    const auto state = folderProbe_;
+    bool busy = false;
+    {
+        std::lock_guard<std::mutex> guard(state->mu);
+        busy = state->pending;
+        if (!busy) {
+            state->pending = true;
+            state->ready = false;
+            state->target = paths.front();
+            state->attempts.clear();
+            state->window = GetSafeHwnd();
+        }
+    }
+    if (busy) {
+        MessageBox(L"FileSync is still checking the previous Client network folder. "
+                   L"Please retry after that check completes.",
+                   L"Checking Client folder", MB_ICONINFORMATION);
+        return;
+    }
+
+    try {
+        std::thread([state, paths]() {
+            std::wstring selected = paths.front();
+            DWORD lastError = ERROR_PATH_NOT_FOUND;
+            std::vector<std::pair<std::wstring, DWORD>> attempts;
+            for (size_t i = 0; i < paths.size(); ++i) {
+                const auto& path = paths[i];
+                const DWORD attrs = ::GetFileAttributesW(path.c_str());
+                const DWORD error = (attrs == INVALID_FILE_ATTRIBUTES)
+                    ? ::GetLastError()
+                    : ((attrs & FILE_ATTRIBUTE_DIRECTORY) ? ERROR_SUCCESS : ERROR_DIRECTORY);
+                attempts.emplace_back(path, error);
+                selected = path;
+                lastError = error;
+                if (error == ERROR_SUCCESS) break;
+                // Only try D$ if the ordinary share seems to be absent.
+                // Do NOT silently escalate/share-hop after ACCESS_DENIED or
+                // when the target is a non-directory or has invalid syntax.
+                if (i == 0 && error != ERROR_BAD_NET_NAME &&
+                    error != ERROR_BAD_NETPATH && error != ERROR_PATH_NOT_FOUND &&
+                    error != ERROR_FILE_NOT_FOUND) break;
+            }
+            {
+                std::lock_guard<std::mutex> guard(state->mu);
+                if (!state->alive) return;
+                state->target = std::move(selected);
+                state->attempts = std::move(attempts);
+                state->error = lastError;
+                state->ready = true;
+                // Post while locked so OnDestroy cannot invalidate the HWND.
+                if (!state->window ||
+                    !::PostMessageW(state->window, WM_APP_CLIENT_FOLDER_RESULT, 0, 0)) {
+                    state->pending = false;
+                    state->ready = false;
+                }
+            }
+        }).detach();
+    } catch (const std::system_error&) {
+        {
+            std::lock_guard<std::mutex> guard(state->mu);
+            state->pending = false;
+            state->ready = false;
+        }
+        MessageBox(L"Could not start the background SMB directory check.",
+                   L"Open Client folder", MB_ICONERROR);
+    }
+}
+
+LRESULT CFServerDlg::OnAppClientFolderResult(WPARAM, LPARAM) {
+    std::wstring unc;
+    DWORD error = ERROR_SUCCESS;
+    std::vector<std::pair<std::wstring, DWORD>> attempts;
+    {
+        std::lock_guard<std::mutex> guard(folderProbe_->mu);
+        if (!folderProbe_->ready || !folderProbe_->alive) return 0;
+        unc = folderProbe_->target;
+        error = folderProbe_->error;
+        attempts = std::move(folderProbe_->attempts);
+        folderProbe_->ready = false;
+        folderProbe_->pending = false;
+    }
+    if (error != ERROR_SUCCESS) {
+        CStringW msg(L"Cannot access the Client's shared folder.\n\n");
+        for (const auto& attempt : attempts) {
+            CStringW line;
+            line.Format(L"%s\nWindows error %lu: %s\n\n",
+                        attempt.first.c_str(),
+                        static_cast<unsigned long>(attempt.second),
+                        ExplainNetworkError(attempt.second).c_str());
+            msg += line;
+        }
+        msg += L"Check the Client's actual SMB share name, permissions, "
+               L"network access and Windows firewall. FileSync will not "
+               L"open Documents as fallback.";
+        MessageBox(msg, L"Cannot access Client folder", MB_ICONWARNING);
+        return 0;
+    }
+
+    // Open the folder ITSELF as the shell target. Do not invoke explorer.exe
+    // with a command-line argument: that is the V8.6 Documents-fallback bug.
+    SHELLEXECUTEINFOW launch{};
+    launch.cbSize = sizeof(launch);
+    launch.fMask = SEE_MASK_FLAG_NO_UI;
+    launch.hwnd = GetSafeHwnd();
+    launch.lpVerb = L"open";
+    launch.lpFile = unc.c_str();
+    launch.nShow = SW_SHOWNORMAL;
+    if (!::ShellExecuteExW(&launch)) {
+        const DWORD launchError = ::GetLastError();
+        CStringW msg;
+        msg.Format(L"Windows could not open this Client folder:\n\n%s\n\n"
+                   L"Windows error %lu: %s",
+                   unc.c_str(), static_cast<unsigned long>(launchError),
+                   ExplainNetworkError(launchError).c_str());
+        MessageBox(msg, L"Cannot open Client folder", MB_ICONWARNING);
+    }
+    return 0;
+}
+
+void CFServerDlg::OnNmDblClickClients(NMHDR* pNMHDR, LRESULT* pResult) {
+    *pResult = 0;
+    const auto* activation = reinterpret_cast<const NMITEMACTIVATE*>(pNMHDR);
+    const int row = activation ? activation->iItem : -1;
+    const auto& entries = clientPresence_.Entries();
+    if (row < 0 || static_cast<size_t>(row) >= entries.size()) return;
+    OpenClientDataFolder(entries[static_cast<size_t>(row)]);
+}
+
+void CFServerDlg::OnNmDblClickTree(NMHDR*, LRESULT* pResult) {
+    *pResult = 0;
+    POINT cursor{};
+    ::GetCursorPos(&cursor);
+    treeFiles_.ScreenToClient(&cursor);
+    UINT flags = 0;
+    HTREEITEM node = treeFiles_.HitTest(CPoint(cursor), &flags);
+    if (!node || node == treeRoot_ || !(flags & TVHT_ONITEM)) return;
+
+    // Tree shows ServerRoot\IP\ExeFolder\... (NOT the remote Client's
+    // WatchRoot). A double-click on an IP must open ServerRoot\IP locally.
+    // The HostKey list retains its separate remote SMB action.
+    std::vector<std::wstring> segments;
+    for (HTREEITEM walk = node; walk && walk != treeRoot_; walk = treeFiles_.GetParentItem(walk))
+        segments.push_back(static_cast<LPCWSTR>(treeFiles_.GetItemText(walk)));
+    std::reverse(segments.begin(), segments.end());
+
+    std::wstring relative;
+    if (!fsyn::ui_tree::BuildServerRelativePath(segments, relative)) {
+        MessageBox(L"Invalid Server Tree path; folder was not opened.",
+                   L"Open Server data folder", MB_ICONWARNING);
+        return;
+    }
+
+    // The engine root is captured at Start. Never concatenate an untrusted
+    // node directly with a drive path without canonical containment checks.
+    // When stopped, use the currently configured root for browsing old data.
+    CStringW configuredRoot;
+    GetDlgItem(IDC_EDIT_ROOT)->GetWindowTextW(configuredRoot);
+    const std::wstring serverRoot = running_ || scheduleWaiting_
+        ? rootUtf16_ : std::wstring(static_cast<LPCWSTR>(configuredRoot));
+    std::wstring serverPath;
+    std::string reason;
+    if (!fsyn::PathSanitizer::Validate(serverRoot, fsyn::WideToUtf8(relative),
+                                       serverPath, &reason)) {
+        CStringW message;
+        message.Format(L"Invalid or unsafe path under ServerRoot.\n\nServerRoot: %s\nRelative: %s",
+                       serverRoot.c_str(), relative.c_str());
+        MessageBox(message, L"Open Server data folder", MB_ICONWARNING);
+        return;
+    }
+
+    DWORD attrs = ::GetFileAttributesW(serverPath.c_str());
+    if (attrs == INVALID_FILE_ATTRIBUTES) {
+        const DWORD code = ::GetLastError();
+        CStringW message;
+        message.Format(L"The data folder does not exist on the Server, or access was denied.\n\n"
+                       L"Path: %s\nWindows error %lu: %s",
+                       serverPath.c_str(), static_cast<unsigned long>(code),
+                       ExplainNetworkError(code).c_str());
+        MessageBox(message, L"Cannot open Server data folder", MB_ICONWARNING);
+        return;
+    }
+    if (!(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+        // Tree can also contain file leaves. Open the containing directory,
+        // never execute a data file merely because it was double-clicked.
+        const auto lastSlash = serverPath.find_last_of(L"\\/");
+        if (lastSlash == std::wstring::npos) return;
+        serverPath.resize(lastSlash);
+    }
+
+    SHELLEXECUTEINFOW launch{};
+    launch.cbSize = sizeof(launch);
+    launch.fMask = SEE_MASK_FLAG_NO_UI;
+    launch.hwnd = GetSafeHwnd();
+    launch.lpVerb = L"open";
+    launch.lpFile = serverPath.c_str();
+    launch.nShow = SW_SHOWNORMAL;
+    if (!::ShellExecuteExW(&launch)) {
+        const DWORD code = ::GetLastError();
+        CStringW message;
+        message.Format(L"Cannot open Server data folder.\n\nPath: %s\nWindows error %lu: %s",
+                       serverPath.c_str(), static_cast<unsigned long>(code),
+                       ExplainNetworkError(code).c_str());
+        MessageBox(message, L"Cannot open Server data folder", MB_ICONWARNING);
     }
 }
 

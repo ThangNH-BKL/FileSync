@@ -1,4 +1,4 @@
-#include "pch.h"
+﻿#include "pch.h"
 #include "ClientSession.h"
 #include "Logger.h"
 #include "Callbacks.h"
@@ -11,7 +11,9 @@
 #include "ByteRangeDelta.h"
 #include "V5Wire.h"
 #include "FileVersionStore.h"
+#include "StageFlushPolicy.h"
 #include <filesystem>
+#include <cstdlib>
 
 namespace fsyn {
 namespace {
@@ -207,6 +209,7 @@ bool ClientSession::DoHandshake() {
     {
         std::lock_guard<std::mutex> g(metaMu_);
         hostKey_ = key;
+        clientWatchRoot_ = hello.watchRoot;
         clientRoot_ = JoinPath(JoinPath(params_.serverRootUtf16,
                                        Utf8ToWide(ipFolder)), Utf8ToWide(exeFolder));
     }
@@ -1136,11 +1139,25 @@ void ClientSession::HandleV5Bytes(const std::vector<uint8_t>& payload) {
         FailV5("literal SHA mismatch");return;
     }
     const bool wrote=v5_.stage->WriteAt(m.dest,m.data.data(),(uint32_t)m.data.size())==m.data.size();
+    // EXPERIMENTAL: postpone stage flush until N MiB. No FILE_COMMITTED can
+    // be emitted until the mandatory final Flush() succeeds. Resume must
+    // revalidate each staged literal's SHA before reuse after a crash.
+    static const uint64_t batchThreshold=[]() -> uint64_t {
+        char b[24]{};DWORD n=GetEnvironmentVariableA("FILESYNC_EXPERIMENTAL_STAGE_BATCH_MIB",b,sizeof(b));
+        if(!n || n>=sizeof(b)) return 0;
+        char* end=nullptr;unsigned long v=std::strtoul(b,&end,10);
+        return end!=b && *end=='\0' && v>=1 && v<=16 ? uint64_t(v)*1024*1024 : 0;
+    }();
+    if(wrote) v5_.unflushedLiteralBytes+=m.data.size();
+    const bool shouldFlush=wrote && ShouldFlushStageLiteral(
+        v5_.unflushedLiteralBytes,batchThreshold);
     const auto beforeFlush=perf::Clock::now();
-    const bool flushed=wrote && v5_.stage->Flush(); // Do not weaken per-literal durability.
-    if(perf::Enabled() && wrote) {
-        perfStageFlushUs_+=perf::Us(beforeFlush,perf::Clock::now());
-        ++perfStageFlushCount_;
+    const bool flushed=wrote && (!shouldFlush || v5_.stage->Flush());
+    if(shouldFlush) {
+        const uint64_t us=perf::Us(beforeFlush,perf::Clock::now());
+        if(params_.transferControl)params_.transferControl->ObserveStageFlush(us);
+        if(perf::Enabled()) {perfStageFlushUs_+=us;++perfStageFlushCount_;}
+        if(flushed)v5_.unflushedLiteralBytes=0;
     }
     if (!flushed) {
         FailV5("persist literal failed");return;
@@ -1158,7 +1175,15 @@ void ClientSession::HandleV5Finish(const std::vector<uint8_t>& payload) {
         std::memcmp(done.sha256, v5_.finalSha.data(), 32) != 0) {
         FailV5("FINISH before complete delta or wrong file hash");return;
     }
-    if (!v5_.stage->TruncateTo(v5_.finalSize) || !v5_.stage->Flush()) {
+    const bool truncated=v5_.stage->TruncateTo(v5_.finalSize);
+    const auto beforeFinalFlush=perf::Clock::now();
+    const bool finalFlushed=truncated && v5_.stage->Flush(); // ALWAYS durable before commit.
+    if(truncated) {
+        const uint64_t us=perf::Us(beforeFinalFlush,perf::Clock::now());
+        if(params_.transferControl)params_.transferControl->ObserveStageFlush(us);
+        if(perf::Enabled()) {perfStageFlushUs_+=us;++perfStageFlushCount_;}
+    }
+    if(!finalFlushed) {
         FailV5("staged file flush failed");return;
     }
     v5_.stage->Close();

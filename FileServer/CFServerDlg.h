@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "resource.h"
 #include <afxdialogex.h>
 #include <shellapi.h>
@@ -56,8 +56,13 @@ protected:
     afx_msg LRESULT OnAppClientFolderResult(WPARAM, LPARAM);
     afx_msg LRESULT OnAppStopComplete(WPARAM, LPARAM);
     afx_msg void OnTimer(UINT_PTR nIDEvent);
+    afx_msg void OnSize(UINT nType, int cx, int cy);
+    afx_msg void OnGetMinMaxInfo(MINMAXINFO* info);
 
 private:
+    void FitWindowToWorkArea();
+    void LayoutDashboard();
+    bool layoutReady_ = false;
     void InstallTrayIcon();
     void RemoveTrayIcon();
     void ShowMainWindow();

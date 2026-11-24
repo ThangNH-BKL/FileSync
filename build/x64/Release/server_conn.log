@@ -1,23 +1,14 @@
-2026-11-24 21:36:33.150 [INFO] ServerEngine: starting
-2026-11-24 21:36:33.150 [INFO] Connection admission limit: 512 (config / optional env override)
-2026-11-24 21:36:33.150 [INFO] Global active-file limit=12 receive pacing=4194304 B/s initial (best effort), mode=adaptive ceiling=10485760
-2026-11-24 21:36:33.150 [INFO] ServerEngine: listening on port 55907
-2026-11-24 21:36:34.191 [INFO] sync queue: started hello.txt size=12 pending=0
-2026-11-24 21:36:34.195 [INFO] v5: completed hello.txt TotalBytes=12 TransferredBytes=12 ReusedBytes=0 CopiedBytes=0 StagedReusedBytes=0 SHA256=PASS
-2026-11-24 21:36:34.230 [WARN] session: recv fail peer closed
-2026-11-24 21:36:34.340 [INFO] ServerEngine: stopped
-2026-11-24 21:36:47.417 [INFO] ServerEngine: starting
-2026-11-24 21:36:47.417 [INFO] Connection admission limit: 512 (dialog setting)
-2026-11-24 21:36:47.417 [INFO] Global active-file limit=12 receive pacing=4194304 B/s initial (best effort), mode=adaptive ceiling=10485760
-2026-11-24 21:36:47.418 [INFO] ServerEngine: listening on port 9000
-2026-11-24 21:36:50.893 [WARN] session: recv fail recv: An established connection was aborted by the software in your host machine.
-2026-11-24 21:36:50.967 [INFO] ServerEngine: stopped
-2026-11-24 21:37:07.988 [INFO] ServerEngine: starting
-2026-11-24 21:37:07.988 [INFO] Connection admission limit: 513 (dialog setting)
-2026-11-24 21:37:07.988 [INFO] Global active-file limit=8 receive pacing=4194304 B/s initial (best effort), mode=adaptive ceiling=10485760
-2026-11-24 21:37:07.989 [INFO] ServerEngine: listening on port 9000
-2026-11-24 21:39:36.027 [INFO] sync queue: started FileSync_Load_Test\ini\0099\000099001 - Copy.ini size=3 pending=0
-2026-11-24 21:39:36.140 [INFO] v5: completed FileSync_Load_Test\ini\0099\000099001 - Copy.ini TotalBytes=3 TransferredBytes=3 ReusedBytes=0 CopiedBytes=0 StagedReusedBytes=0 SHA256=PASS
-2026-11-24 21:40:09.031 [INFO] sync queue: started FileSync_Load_Test\ini\0099\000099001.ini size=4 pending=0
-2026-11-24 21:40:09.142 [INFO] v5: completed FileSync_Load_Test\ini\0099\000099001.ini SavedAs=FileSync_Load_Test\ini\0099\000099001 (1).ini TotalBytes=4 TransferredBytes=1 ReusedBytes=3 CopiedBytes=3 StagedReusedBytes=0 SHA256=PASS
-2026-11-24 21:42:37.589 [INFO] ServerEngine: stopped
+2026-11-24 21:57:53.353 [INFO] ServerEngine: starting
+2026-11-24 21:57:53.353 [INFO] Connection admission limit: 512 (config / optional env override)
+2026-11-24 21:57:53.353 [INFO] Global active-file limit=12 receive pacing=4194304 B/s initial (best effort), mode=adaptive ceiling=10485760
+2026-11-24 21:57:53.353 [INFO] ServerEngine: listening on port 57398
+2026-11-24 21:57:54.372 [INFO] sync queue: started hello.txt size=12 pending=0
+2026-11-24 21:57:54.376 [INFO] v5: completed hello.txt TotalBytes=12 TransferredBytes=12 ReusedBytes=0 CopiedBytes=0 StagedReusedBytes=0 SHA256=PASS
+2026-11-24 21:57:54.430 [WARN] session: recv fail peer closed
+2026-11-24 21:57:54.648 [INFO] ServerEngine: stopped
+2026-11-24 21:58:15.624 [INFO] ServerEngine: starting
+2026-11-24 21:58:15.624 [INFO] Connection admission limit: 513 (dialog setting)
+2026-11-24 21:58:15.624 [INFO] Global active-file limit=8 receive pacing=4194304 B/s initial (best effort), mode=adaptive ceiling=10485760
+2026-11-24 21:58:15.625 [INFO] ServerEngine: listening on port 9000
+2026-11-24 22:00:45.001 [WARN] session: recv fail recv: A request to send or receive data was disallowed because the socket had already been shut down in that direction with a previous shutdown call.
+2026-11-24 22:00:45.010 [INFO] ServerEngine: stopped

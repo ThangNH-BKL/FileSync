@@ -16,7 +16,7 @@ $checks = @(
  @{Name='UI passes active transfers to ServerEngine';OK=($dlg.Contains('cfg.maxActiveTransfers = maxTransfers;'))},
  @{Name='UI values override legacy environment';OK=($dlg.Contains('cfg.limitsFromDialog = true') -and $config.Contains('limitsFromDialog = false') -and ($engine -match 'if\s*\(!cfg_\.limitsFromDialog\s*&&'))},
  @{Name='Editable only when Server stopped';OK=($dlg.Contains('IDC_EDIT_MAX_CLIENTS)->EnableWindow(enabled)') -and $dlg.Contains('IDC_EDIT_ACTIVE_TRANSFERS)->EnableWindow(enabled)'))},
- @{Name='New version label';OK=$dlg.Contains('FileServer V8.6.5 - File Sync')}
+ @{Name='New version label';OK=($dlg.Contains('FileServer V8.6.5 - File Sync') -or $dlg.Contains('FileServer V8.6.6 - File Sync'))}
 )
 $failed=0
 foreach ($c in $checks) { if($c.OK){ Write-Host ('PASS: '+$c.Name) } else { Write-Host ('FAIL: '+$c.Name) -ForegroundColor Red; $failed++ } }

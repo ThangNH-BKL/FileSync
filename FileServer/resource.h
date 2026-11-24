@@ -32,3 +32,8 @@
 // Server-side admission and active-transfer limits (V8.6.5)
 #define IDC_EDIT_MAX_CLIENTS            1040
 #define IDC_EDIT_ACTIVE_TRANSFERS       1041
+
+// Resizable server dashboard headers (V8.6.6)
+#define IDC_STATIC_CLIENTS_HEADER 1042
+#define IDC_STATIC_TREE_HEADER 1043
+#define IDC_STATIC_LOG_HEADER 1044

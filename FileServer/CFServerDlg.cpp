@@ -4,6 +4,7 @@
 #include "Util.h"
 #include "FilterSelection.h"
 #include "ServerLimitSettings.h"
+#include "ServerDialogLayout.h"
 #include "UiNetworkPath.h"
 #include "UiServerTreePath.h"
 #include "PathSanitizer.h"
@@ -73,15 +74,17 @@ BEGIN_MESSAGE_MAP(CFServerDlg, CDialogEx)
     ON_MESSAGE(WM_APP_STOP_COMPLETE, &CFServerDlg::OnAppStopComplete)
     ON_MESSAGE(WM_APP_CLIENT_FOLDER_RESULT, &CFServerDlg::OnAppClientFolderResult)
     ON_WM_TIMER()
+    ON_WM_SIZE()
+    ON_WM_GETMINMAXINFO()
 END_MESSAGE_MAP()
 
 BOOL CFServerDlg::OnInitDialog() {
     CDialogEx::OnInitDialog();
-    SetWindowText(_T("FileServer V8.6.5 - File Sync"));
+    SetWindowText(_T("FileServer V8.6.6 - File Sync"));
 
     // The status icon is shown beside HostKey; the final column also shows
     // Online/Offline in text (useful when the user cannot distinguish colors).
-    listClients_.InsertColumn(0, _T("HostKey (IP | client full path)"), LVCFMT_LEFT, 390);
+    listClients_.InsertColumn(0, _T("HostKey (IP | client full path)"), LVCFMT_LEFT, 275);
     listClients_.InsertColumn(1, _T("IP"), LVCFMT_LEFT, 88);
     listClients_.InsertColumn(2, _T("Status"), LVCFMT_LEFT, 66);
     listClients_.SetExtendedStyle(listClients_.GetExtendedStyle() |
@@ -116,9 +119,105 @@ BOOL CFServerDlg::OnInitDialog() {
     UpdateStatus(_T("Status: Idle"));
     taskbarCreatedMsg_ = WM_TASKBARCREATED;
     InstallTrayIcon();
+    // Keep the window entirely inside the current monitor working area,
+    // including the Windows taskbar and display scaling.
+    layoutReady_ = true;
+    FitWindowToWorkArea();
+    LayoutDashboard();
     // Defer auto-start and hiding until the dialog has finished initializing.
     PostMessage(WM_TRAY_STARTUP, 0, 0);
     return TRUE;
+}
+
+
+// Responsive dashboard (V8.6.6). The configuration rows remain compact;
+// panels, tree, progress and log share the remaining screen height.
+void CFServerDlg::FitWindowToWorkArea() {
+    if (!::IsWindow(GetSafeHwnd()) || IsZoomed()) return;
+    const HMONITOR monitor = ::MonitorFromWindow(GetSafeHwnd(), MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!::GetMonitorInfoW(monitor, &mi)) return;
+    const RECT& area = mi.rcWork;
+    const int availableW = area.right - area.left;
+    const int availableH = area.bottom - area.top;
+    if (availableW <= 0 || availableH <= 0) return;
+    CRect window;
+    GetWindowRect(&window);
+    const int padding = 8; // pixels, not dialog units
+    const int fittedW = (std::min)(window.Width(), (std::max)(1, availableW - padding*2));
+    const int fittedH = (std::min)(window.Height(), (std::max)(1, availableH - padding*2));
+    const int newX = area.left + (availableW - fittedW)/2;
+    const int newY = area.top + (availableH - fittedH)/2;
+    SetWindowPos(nullptr, newX, newY, fittedW, fittedH, SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+void CFServerDlg::OnGetMinMaxInfo(MINMAXINFO* info) {
+    CDialogEx::OnGetMinMaxInfo(info);
+    if (!layoutReady_ || !::IsWindow(GetSafeHwnd())) return;
+    RECT fontUnits{0, 0, 100, 100};
+    if (!::MapDialogRect(GetSafeHwnd(), &fontUnits)) return;
+    CRect wnd, client;
+    GetWindowRect(&wnd);
+    GetClientRect(&client);
+    const int nonClientWidth = wnd.Width() - client.Width();
+    const int nonClientHeight = wnd.Height() - client.Height();
+    // Avoid an impossible minimum size on high-DPI 1366x768 monitors.
+    const auto monitor = ::MonitorFromWindow(GetSafeHwnd(), MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi{};
+    mi.cbSize = sizeof(mi);
+    if (!::GetMonitorInfoW(monitor, &mi)) return;
+    const int workW = mi.rcWork.right - mi.rcWork.left;
+    const int workH = mi.rcWork.bottom - mi.rcWork.top;
+    const int minW = (535 * fontUnits.right + 50)/100 + nonClientWidth;
+    const int minH = (246 * fontUnits.bottom + 50)/100 + nonClientHeight;
+    info->ptMinTrackSize.x = (std::min)(minW, (std::max)(1, workW - 16));
+    info->ptMinTrackSize.y = (std::min)(minH, (std::max)(1, workH - 16));
+}
+
+void CFServerDlg::OnSize(UINT type, int cx, int cy) {
+    CDialogEx::OnSize(type, cx, cy);
+    if (type != SIZE_MINIMIZED && layoutReady_) LayoutDashboard();
+}
+
+void CFServerDlg::LayoutDashboard() {
+    if (!layoutReady_ || !::IsWindow(listClients_.GetSafeHwnd()) ||
+        !::IsWindow(treeFiles_.GetSafeHwnd())) return;
+    CRect client;
+    GetClientRect(&client);
+    RECT fontUnits{0, 0, 100, 100};
+    if (!::MapDialogRect(GetSafeHwnd(), &fontUnits)) return;
+    const auto layout = fsyn::server_dialog_layout::Compute(
+        client.Width(), client.Height(), fontUnits.right, fontUnits.bottom);
+    if (!layout.fits) return;
+    HDWP batch = ::BeginDeferWindowPos(10);
+    if (!batch) return;
+    const auto move = [&](UINT id, const fsyn::server_dialog_layout::Rect& r) {
+        if (!batch) return;
+        HWND child = ::GetDlgItem(GetSafeHwnd(), id);
+        if (child) batch = ::DeferWindowPos(batch, child, nullptr,
+            r.x, r.y, r.w, r.h, SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+    };
+    move(IDC_STATIC_CLIENTS_HEADER, layout.clientsHeader);
+    move(IDC_STATIC_TREE_HEADER, layout.treeHeader);
+    move(IDC_LIST_CLIENTS, layout.clients);
+    move(IDC_TREE_FILES, layout.tree);
+    move(IDC_STATIC_PROGRESS, layout.headline);
+    move(IDC_PROGRESS_FILES, layout.progress);
+    move(IDC_STATIC_PROGRESS_DETAIL, layout.detail);
+    move(IDC_STATIC_LOG_HEADER, layout.logHeader);
+    move(IDC_LIST_LOG, layout.log);
+    move(IDC_STATIC_STATUS, layout.status);
+    if (!batch) return; // Nothing applied if Windows rejected the batch.
+    ::EndDeferWindowPos(batch);
+    // Keep the full HostKey useful at any width (horizontal scroll remains
+    // available instead of truncating away IP/path columns).
+    const int ipWidth = 84;
+    const int statusWidth = 66;
+    const int hostWidth = (std::max)(180, layout.clients.w - ipWidth - statusWidth - 10);
+    if (listClients_.GetColumnWidth(0) != hostWidth) listClients_.SetColumnWidth(0, hostWidth);
+    if (listClients_.GetColumnWidth(1) != ipWidth) listClients_.SetColumnWidth(1, ipWidth);
+    if (listClients_.GetColumnWidth(2) != statusWidth) listClients_.SetColumnWidth(2, statusWidth);
 }
 
 void CFServerDlg::EnableConfig(bool enabled) {
@@ -584,7 +683,7 @@ void CFServerDlg::InstallTrayIcon() {
     trayIcon_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     trayIcon_.uCallbackMessage = WM_TRAY_ICON;
     trayIcon_.hIcon = ::LoadIconW(nullptr, IDI_APPLICATION);
-    wcscpy_s(trayIcon_.szTip, _countof(trayIcon_.szTip), L"FileServer V8.6.5 - FileSync");
+    wcscpy_s(trayIcon_.szTip, _countof(trayIcon_.szTip), L"FileServer V8.6.6 - FileSync");
     trayInstalled_ = Shell_NotifyIconW(NIM_ADD, &trayIcon_) != FALSE;
     if (trayInstalled_) {
         trayIcon_.uVersion = NOTIFYICON_VERSION_4;
@@ -602,6 +701,7 @@ void CFServerDlg::RemoveTrayIcon() {
 void CFServerDlg::ShowMainWindow() {
     ShowWindow(SW_SHOW);
     ShowWindow(SW_RESTORE);
+    if (!IsZoomed()) FitWindowToWorkArea();
     SetForegroundWindow();
 }
 

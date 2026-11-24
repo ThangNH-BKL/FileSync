@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CFServerApp.h"><Filter>Header</Filter></ClInclude>
+    <ClInclude Include="ServerDialogLayout.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="CFServerDlg.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="resource.h"><Filter>Header</Filter></ClInclude>
     <ClInclude Include="pch.h"><Filter>Header</Filter></ClInclude>
